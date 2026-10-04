@@ -7,14 +7,22 @@ From the repository root:
 ```sh
 swift run --package-path Mac
 swift test --package-path Mac
-bash Mac/package.sh --unsigned
+bash Mac/install.sh
 ```
 
-The package is written to `dist/mac/GitNebula-unsigned.zip`. Extract and move `GitNebula.app` to `/Applications` or `~/Applications`. Development packages use an ad-hoc signature, not a trusted Developer ID signature.
+`install.sh` builds the app and Finder extension, installs `~/Applications/GitNebula.app`, registers it with LaunchServices and PlugInKit, requests that the extension be enabled, and opens the app. Existing versions are retained under `~/Applications/.gitnebula-backups/`. To reinstall an already built package, run `bash Mac/install.sh --no-build`; add `--no-open` to leave the app closed. An alternate installation directory can be passed with `--destination`.
+
+For packaging only, run `bash Mac/package.sh --unsigned`. The package is written to `dist/mac/GitNebula-unsigned.zip`. Development packages use an ad-hoc signature, not a trusted Developer ID signature.
+
+## Opening a repository
+
+Type or paste an absolute path, `~/Projects/my-repo`, or a local `file://` URL into **リポジトリのパス**, then press Enter or **開く**. **参照…** opens the native folder picker. Quoted paths containing spaces are accepted. The path remains editable after a failed attempt. The app activates as a regular macOS application even when started with `swift run`.
+
+To create a repository in an existing folder, choose **リポジトリを作成（Init）**. The new Stash, Tag, remote/identity settings, history editing, Blame, patch, Worktree and Submodule tools are described in the [feature matrix](../shared/FEATURES.md).
 
 ## Finder integration
 
-The packaged app contains `GitNebulaFinder.appex`. After installing and opening the app, enable **GitNebula Finder** in System Settings → Login Items & Extensions → Finder Extensions (the section name varies by macOS version). Right-click a repository folder, a file, or the folder background, then choose **GitNebula → 変更をコミット / 差分を確認 / 履歴を表示 / Pull / Push / Fetch / ブランチを切り替え / Clone**. Each item opens its own focused dialog. Files and folder descendants are preselected for Commit; several selected files must belong to the same repository. The extension covers folders under `/Users` and `/Volumes`.
+The packaged app contains `GitNebulaFinder.appex`. The launch screen shows its enabled state; **Finder 拡張の設定を開く** opens macOS extension settings. If the menu does not appear after installation, enable **GitNebula Finder** there and click **状態を更新** in the app. macOS may require the user's confirmation to enable an extension. Right-click a repository folder, a file, or the folder background, then choose the icon-marked **GitNebula** submenu. It provides the usual Git actions and the new Stash, Tag, remote and history tools. Each item opens its own focused dialog. Files and folder descendants are preselected for Commit; several selected files must belong to the same repository. The extension covers `/Users`, `/Volumes`, `/private/tmp`, and `/opt`.
 
 Finder opens the requested operation through `gitnebula://commit?path=…` (and the corresponding action name). Paths are URL-encoded; multiple selections use repeated `path` parameters. A new Finder action preserves any existing dialog and its draft. For command-line use:
 
@@ -24,7 +32,7 @@ open -na GitNebula --args --action diff --path "/path/to/repository/file.txt"
 open -na GitNebula --args --action clone --path /path/to/parent
 ```
 
-After upgrading, replace the application bundle and toggle the Finder extension off and on to reload the menu. The extension covers `/Users` and `/Volumes`.
+After upgrading, quit the previous app, run the installer again, and toggle the Finder extension off and on if Finder still shows the old menu. A GitNebula toolbar button is also available from Finder's toolbar customization.
 
 Disable the extension in System Settings before removing the application. `swift run` runs the development executable and does not install the Finder extension.
 

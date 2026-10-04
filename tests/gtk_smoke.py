@@ -26,8 +26,10 @@ with tempfile.TemporaryDirectory(prefix='gitnebula-ui-') as directory:
             time.sleep(.01)
         assert not window.busy, 'GUI operation timed out'
         assert not window.status.has_css_class('error'), window.status.get_text()
-    window.repo = repo
-    window.task(window.snapshot, window.render); wait()
+    window.repository_path.set_text('"' + directory + '"')
+    window.repository_path.emit('activate'); wait()
+    assert window.repo.path == str(root.resolve())
+    assert window.repository_path.get_editable()
     row = window.files.get_first_child().get_child()
     check = row.get_first_child(); button = check.get_next_sibling()
     button.emit('clicked'); wait()

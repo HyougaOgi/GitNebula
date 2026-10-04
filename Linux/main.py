@@ -59,6 +59,11 @@ class Window(Gtk.ApplicationWindow):
         self.heading = Gtk.Label(xalign=0); self.heading.add_css_class('title'); box.append(self.heading)
         self.hint = Gtk.Label(xalign=0, wrap=True); self.hint.add_css_class('muted'); box.append(self.hint)
         self.location = Gtk.Label(label='リポジトリを選択してください。', xalign=0, wrap=True, selectable=True); box.append(self.location)
+        self.path_bar = Gtk.Box(spacing=8)
+        self.repository_path = Gtk.Entry(placeholder_text='リポジトリのパス（~/Projects/my-repo）', hexpand=True)
+        self.repository_path.connect('activate', self.open_entered_path)
+        path_button = Gtk.Button(label='パスを開く'); path_button.connect('clicked', self.open_entered_path)
+        self.path_bar.append(self.repository_path); self.path_bar.append(path_button); box.append(self.path_bar)
         toolbar = Gtk.Box(spacing=8)
         self.open_button = Gtk.Button(label='フォルダを選択'); self.open_button.connect('clicked', self.choose)
         self.refresh_button = Gtk.Button(label='更新'); self.refresh_button.connect('clicked', lambda *_: self.task(self.snapshot, self.render))
@@ -175,6 +180,7 @@ class Window(Gtk.ApplicationWindow):
         ready = not self.busy and self.repo is not None
         self.open_button.set_visible(self.action != 'clone'); self.refresh_button.set_visible(self.action != 'clone'); self.location.set_visible(self.action != 'clone')
         self.open_button.set_sensitive(not self.busy)
+        self.path_bar.set_sensitive(not self.busy); self.path_bar.set_visible(self.action != 'clone')
         self.refresh_button.set_sensitive(ready)
         self.other.set_sensitive(not self.busy)
         self.clone_button.set_sensitive(not self.busy and not self.succeeded and bool(self.clone_source.get_text().strip()) and bool(self.clone_destination.get_text().strip()))
@@ -240,13 +246,22 @@ class Window(Gtk.ApplicationWindow):
         def response(dialog, result):
             if result == Gtk.ResponseType.ACCEPT:
                 path = dialog.get_file().get_path()
-                self.request = LaunchRequest(self.action, (path,)); self.initial_selection = True
-                self.repo = None; self.selected.clear(); self.message.set_text(''); self.merging = False
-                if hasattr(self, 'last_snapshot'): del self.last_snapshot
-                self.remote_choice.remove_all(); self.branch_choice.remove_all(); self.conflict_choice.remove_all()
-                self.open_repository(path)
+                self.repository_path.set_text(path); self.open_entered_path()
             dialog.destroy()
         chooser.connect('response', response); chooser.show()
+
+    def open_entered_path(self, *_):
+        if self.busy: return
+        path = self.repository_path.get_text().strip()
+        if len(path) >= 2 and path[0] == path[-1] and path[0] in ('"', "'"): path = path[1:-1]
+        path = os.path.expanduser(path)
+        if not os.path.isabs(path):
+            self.status.set_text('フォルダの絶対パスを入力してください。'); self.status.add_css_class('error'); return
+        self.request = LaunchRequest(self.action, (path,)); self.initial_selection = True
+        self.repo = None; self.selected.clear(); self.message.set_text(''); self.merging = False
+        if hasattr(self, 'last_snapshot'): del self.last_snapshot
+        self.remote_choice.remove_all(); self.branch_choice.remove_all(); self.conflict_choice.remove_all()
+        self.open_repository(path)
 
     def snapshot(self):
         return self.state(self.repo)
@@ -255,6 +270,7 @@ class Window(Gtk.ApplicationWindow):
         return repo, repo.branch(), repo.changes(), repo.graph(), repo.branches(), repo.remotes(), repo.conflicts(), repo.merge_in_progress(), repo.preferred_remote()
 
     def open_repository(self, path):
+        self.repository_path.set_text(path)
         def work():
             repo = Repository(LaunchRequest.directory(path))
             for selected in self.request.paths:

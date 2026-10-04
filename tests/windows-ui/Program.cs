@@ -48,6 +48,10 @@ internal static class Program
                 choices.SelectedItem = choices.Items.Cast<ComboBoxItem>().Single(i => (string)i.Tag == "pull");
                 Check(Find<Border>("RemotePanel").IsVisible && !Find<Border>("FilePanel").IsVisible, "pull mode");
                 Check(!Find<Button>("ExecuteButton").IsEnabled, "no remote prevents execution");
+                Find<TextBox>("RepositoryPath").Text = "\"" + root + "\"";
+                Check(!Find<TextBox>("RepositoryPath").IsReadOnly && Find<TextBox>("RepositoryPath").IsEnabled, "path is editable");
+                Find<Button>("OpenPathButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); await Wait();
+                Check(Find<TextBox>("RepositoryPath").Text == root, "typed path opens repository");
                 Console.WriteLine("PASS: WPF action routing, selected-file commit, preview, modes and feedback");
             }
             catch (Exception error) { Console.Error.WriteLine(error); code = 1; }

@@ -24,6 +24,7 @@ struct GitRepository: Sendable {
         var environment = ProcessInfo.processInfo.environment
         environment["GIT_TERMINAL_PROMPT"] = "0"
         process.environment = environment
+        process.standardInput = FileHandle.nullDevice
         // File-backed output avoids a full pipe blocking the child on large diffs.
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -38,7 +39,8 @@ struct GitRepository: Sendable {
         process.standardOutput = stdout; process.standardError = stderr
         try process.run(); process.waitUntilExit()
         guard process.terminationStatus == 0 else {
-            throw NSError(domain: "GitNebula", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: String(decoding: try Data(contentsOf: error), as: UTF8.self)])
+            let details = String(decoding: try Data(contentsOf: output), as: UTF8.self) + String(decoding: try Data(contentsOf: error), as: UTF8.self)
+            throw NSError(domain: "GitNebula", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: details.isEmpty ? "Git が終了コード \(process.terminationStatus) で失敗しました。" : details])
         }
         return String(decoding: try Data(contentsOf: output), as: UTF8.self)
     }
@@ -66,6 +68,7 @@ struct GitRepository: Sendable {
         return text.isEmpty ? "未追跡ファイル、またはテキスト差分のない変更です。" : text
     }
     func commit(_ files: [String], _ message: String) throws {
+        try requireIdle()
         guard try conflicts().isEmpty, try !mergeInProgress() else { throw failure("競合を解決し、「マージ完了」を使ってください") }
         let changes = try changes()
         let available = Set(changes.map(\.path))
@@ -123,6 +126,7 @@ struct GitRepository: Sendable {
         return name
     }
     func requireClean() throws {
+        try requireIdle()
         guard try changes().isEmpty, try !mergeInProgress() else { throw failure("変更をコミットし、進行中のマージを完了してください") }
     }
     func fetch(_ name: String) throws { _ = try run(["fetch", "--prune", remote(name)]) }

@@ -11,6 +11,10 @@
         <TextBlock x:Name="Heading" FontSize="28" FontWeight="Bold"/>
         <TextBlock x:Name="Hint" Foreground="#9CA8C7" TextWrapping="Wrap" Margin="0,8,0,12"/>
         <TextBlock x:Name="Location" Text="リポジトリを選択してください。" TextWrapping="Wrap"/>
+        <DockPanel x:Name="PathPanel" Margin="0,8,0,0">
+          <Button DockPanel.Dock="Right" x:Name="OpenPathButton" Content="パスを開く" Click="OpenPath_Click"/>
+          <TextBox x:Name="RepositoryPath" AutomationProperties.Name="リポジトリのパス" ToolTip="リポジトリのパスを入力して Enter" KeyDown="RepositoryPath_KeyDown"/>
+        </DockPanel>
         <WrapPanel Margin="0,8,0,8"><Button x:Name="OpenButton" Content="フォルダを選択" Click="Open_Click"/><Button x:Name="RefreshButton" Content="更新" Click="Refresh_Click"/></WrapPanel>
       </StackPanel>
       <StackPanel DockPanel.Dock="Bottom">

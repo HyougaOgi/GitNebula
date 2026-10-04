@@ -37,6 +37,7 @@ Finder、Explorer、Nautilus、Dolphin に以下の操作を提供する。
 
 各 OS のエントリーポイントは `--action <操作> --path <絶対パス>` を受け付ける。
 操作は `open`, `commit`, `diff`, `log`, `pull`, `push`, `fetch`, `switch`, `clone`, `workspace`。
+macOS では追加で `init`, `stash`, `tags`, `remotes`, `tools` を受け付ける。機能とプラットフォームごとの対応は [FEATURES.md](FEATURES.md) を参照。
 `--path` は複数指定可能。`--` 以後もパスとして扱う。旧 `--open <パス>` も利用可能。
 Linux では従来の位置引数も利用可能。
 

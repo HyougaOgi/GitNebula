@@ -65,6 +65,7 @@ public partial class MainWindow : Window
         ConflictPanel.Visibility = Show(action is not ("open" or "clone") && (merging || ConflictChoice.Items.Count > 0));
         Progress.Visibility = Show(busy);
         OpenButton.Visibility = RefreshButton.Visibility = Location.Visibility = Show(action != "clone");
+        PathPanel.Visibility = Show(action != "clone");
         RefreshButton.IsEnabled = ready;
         CommitButton.IsEnabled = ready && selected.Count > 0 && !string.IsNullOrWhiteSpace(Message.Text) && !merging;
         SelectionCount.Text = $"{selected.Count} ファイルを選択";
@@ -125,12 +126,28 @@ public partial class MainWindow : Window
     {
         var dialog = new OpenFolderDialog { Title = "Git リポジトリを選択" };
         if (dialog.ShowDialog(this) != true) return;
-        request = new(action, [dialog.FolderName]); initialSelection = true; selected.Clear(); Message.Clear(); repository = null; merging = false;
-        RemoteChoice.ItemsSource = null; BranchChoice.ItemsSource = null; ConflictChoice.ItemsSource = null;
-        await Act(() => OpenPath(dialog.FolderName));
+        await OpenManualPath(dialog.FolderName);
+    }
+    private async void OpenPath_Click(object sender, RoutedEventArgs e) => await OpenManualPath(RepositoryPath.Text);
+    private async void RepositoryPath_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key != System.Windows.Input.Key.Enter) return;
+        e.Handled = true; await OpenManualPath(RepositoryPath.Text);
+    }
+    private async Task OpenManualPath(string input)
+    {
+        if (busy) return;
+        await Act(async () => {
+            var path = LaunchRequest.InputPath(input);
+            RepositoryPath.Text = path;
+            request = new(action, [path]); initialSelection = true; selected.Clear(); Message.Clear(); repository = null; merging = false;
+            RemoteChoice.ItemsSource = null; BranchChoice.ItemsSource = null; ConflictChoice.ItemsSource = null;
+            await OpenPath(path);
+        });
     }
     private async Task OpenPath(string path)
     {
+        RepositoryPath.Text = path;
         var candidate = new GitRepository(LaunchRequest.DirectoryFor(path)); await candidate.Open();
         foreach (var selectedPath in request.Paths.Skip(1))
         {

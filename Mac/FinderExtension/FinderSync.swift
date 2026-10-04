@@ -5,8 +5,11 @@ import FinderSync
 final class FinderSync: FIFinderSync {
     override init() {
         super.init()
-        FIFinderSyncController.default().directoryURLs = [URL(fileURLWithPath: "/Users"), URL(fileURLWithPath: "/Volumes")]
+        FIFinderSyncController.default().directoryURLs = Set(["/Users", "/Volumes", "/private/tmp", "/opt"].map { URL(fileURLWithPath: $0) })
     }
+    override var toolbarItemName: String { "GitNebula" }
+    override var toolbarItemToolTip: String { "このフォルダで Git を操作" }
+    override var toolbarItemImage: NSImage { NSImage(systemSymbolName: "arrow.triangle.branch", accessibilityDescription: "GitNebula")! }
     override func menu(for menuKind: FIMenuKind) -> NSMenu? {
         let controller = FIFinderSyncController.default()
         // Background menus must use the clicked folder, not a stale selection.
@@ -18,7 +21,8 @@ final class FinderSync: FIFinderSync {
         }
         guard !urls.isEmpty else { return nil }
         let menu = NSMenu(title: "GitNebula")
-        let root = NSMenuItem(title: "✧ GitNebula", action: nil, keyEquivalent: "")
+        let root = NSMenuItem(title: "GitNebula", action: nil, keyEquivalent: "")
+        root.image = NSImage(systemSymbolName: "arrow.triangle.branch", accessibilityDescription: nil)
         let actions = NSMenu(title: "GitNebula")
         for action in GitAction.allCases where action != .open {
             if action == .clone || action == .workspace { actions.addItem(.separator()) }

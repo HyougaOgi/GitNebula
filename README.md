@@ -26,13 +26,17 @@ Right-click a file or folder, choose **GitNebula → Commit / Diff / Log / Pull 
 
 GitNebula is in active development. Native build and integration-test commands are included for every platform. Release signing requires the maintainer's own signing identity; unsigned development packages are not notarized or trusted release artifacts.
 
+macOS additionally supports Init, Stash, Tag management, remote/identity settings, staging, ignore rules, history editing, Blame, patches, Worktree, and Submodule operations. See the [feature matrix and remaining TortoiseGit differences](shared/FEATURES.md) for exact platform coverage.
+
 ## Getting started
 
 Clone the repository, install the requirements for your platform, then run from the repository root:
 
 ```sh
-# macOS
-swift run --package-path Mac
+# macOS: install the application and Finder context menu
+bash Mac/install.sh
+# Development UI only (does not install Finder integration):
+# swift run --package-path Mac
 
 # Debian / Ubuntu Linux
 sudo apt-get install python3-gi gir1.2-gtk-4.0 git
@@ -65,11 +69,11 @@ Install the file-manager integration from your [platform guide](#getting-started
 
 Commit and diff are scoped to the selected files or folder descendants. History and remote operations apply to the repository. Finder and Linux accept multiple selections within one repository; Explorer uses one selected file/folder per dialog. A folder selection includes its descendants. Advanced branch and merge tools are under **詳細操作**; conflict controls appear only when needed.
 
-Launching the application normally shows an operation chooser. **その他の操作** switches between dialogs. UI labels use Japanese descriptions alongside standard Git terms. See [the interaction specification](shared/DESIGN.md).
+Launching the application normally shows an editable repository path and an operation chooser. Type/paste a path and press Enter, or use the folder picker. **その他の操作** switches between dialogs. UI labels use Japanese descriptions alongside standard Git terms. See [the interaction specification](shared/DESIGN.md).
 
 Pull accepts fast-forward updates only. Pull and Push respect an existing upstream branch even when its name differs from the local branch; the configured remote is preselected. Branch deletion uses Git's merged-branch check. Branch switching and merging require a clean working tree. Git hooks run normally.
 
-When a merge conflicts, select a conflicted file and edit its resolution, or resolve it in another editor and mark it resolved. Completing a merge includes **all staged changes**. Aborting a merge discards the current resolution work after confirmation. Rebase and cherry-pick continuation are not supported.
+When a merge conflicts, select a conflicted file and edit its resolution, or resolve it in another editor and mark it resolved. Completing a merge includes **all staged changes**. Aborting a merge discards the current resolution work after confirmation. macOS also supports continuing or aborting Rebase, Cherry-pick and Revert; Windows and Linux currently support merge completion only.
 
 If a renamed file's original path has been recreated, explicitly select that path too or move it aside before committing the rename. This prevents unselected replacement content from being included. A failed commit may leave selected files staged.
 

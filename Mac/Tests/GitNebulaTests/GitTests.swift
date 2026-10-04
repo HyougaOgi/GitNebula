@@ -22,6 +22,7 @@ final class GitTests: XCTestCase {
         try repo.commit(["other.txt"], "other")
         _ = try repo.run(["mv", "old.txt", "new.txt"]); try write("old.txt", "recreated\n")
         let tree = try repo.run(["write-tree"])
+        XCTAssertThrowsError(try repo.stage(["new.txt"]))
         XCTAssertThrowsError(try repo.commit(["new.txt"], "unsafe"))
         XCTAssertEqual(try repo.run(["write-tree"]), tree)
         try repo.commit(["new.txt", "old.txt"], "explicit selection")

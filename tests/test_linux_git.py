@@ -122,7 +122,7 @@ class GitTests(unittest.TestCase):
                 root.mkdir()
                 subprocess.run(['git', '-C', str(root), 'init', '-q'], check=True)
                 repo = Repository(str(root))
-                self.assertEqual(repo.path, str(root))
+                self.assertEqual(repo.path, str(root.resolve()))
                 self.assertEqual(repo.changes(), [])
 
     def initial(self):

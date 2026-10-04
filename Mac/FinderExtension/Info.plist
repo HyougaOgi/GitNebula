@@ -5,10 +5,11 @@
 <key>CFBundleName</key><string>GitNebula Finder</string>
 <key>CFBundleExecutable</key><string>GitNebulaFinder</string>
 <key>CFBundlePackageType</key><string>XPC!</string>
-<key>CFBundleVersion</key><string>0.2.0</string>
-<key>CFBundleShortVersionString</key><string>0.2.0</string>
+<key>CFBundleVersion</key><string>0.3.0</string>
+<key>CFBundleShortVersionString</key><string>0.3.0</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>NSExtension</key><dict>
+<key>NSExtensionAttributes</key><dict/>
 <key>NSExtensionPointIdentifier</key><string>com.apple.FinderSync</string>
 <key>NSExtensionPrincipalClass</key><string>GitNebulaFinderSync</string>
 </dict></dict></plist>

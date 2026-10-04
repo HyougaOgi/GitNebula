@@ -1,7 +1,7 @@
 import Foundation
 
 enum GitAction: String, CaseIterable, Sendable {
-    case open, commit, diff, log, pull, push, fetch, switchBranch = "switch", clone, workspace
+    case open, commit, diff, log, pull, push, fetch, switchBranch = "switch", clone, initialize = "init", stash, tags, remotes, tools, workspace
 
     var title: String {
         switch self {
@@ -14,6 +14,11 @@ enum GitAction: String, CaseIterable, Sendable {
         case .fetch: return "リモートを更新（Fetch）"
         case .switchBranch: return "ブランチを切り替え"
         case .clone: return "リポジトリを複製（Clone）"
+        case .initialize: return "リポジトリを作成（Init）"
+        case .stash: return "変更を退避（Stash）"
+        case .tags: return "タグを管理"
+        case .remotes: return "リモートを設定"
+        case .tools: return "履歴・ファイル・作業ツリー"
         case .workspace: return "詳細操作"
         }
     }
@@ -28,6 +33,11 @@ enum GitAction: String, CaseIterable, Sendable {
         case .fetch: return "リモートの最新情報を取得します。作業ファイルは変更しません。"
         case .switchBranch: return "切り替え先を選んで実行します。未コミットの変更がある場合は停止します。"
         case .clone: return "取得元と、新しく作るフォルダを指定してください。"
+        case .initialize: return "選択したフォルダに新しい Git リポジトリを作成します。"
+        case .stash: return "変更を一時保存し、後で作業ツリーに戻します。"
+        case .tags: return "リリースなどの目印をコミットに付けます。"
+        case .remotes: return "取得・送信先の URL を登録・変更します。"
+        case .tools: return "履歴編集、Blame、ステージ、パッチ、Worktree、Submodule。"
         case .workspace: return "ブランチ管理とマージの操作。"
         }
     }
@@ -41,6 +51,11 @@ enum GitAction: String, CaseIterable, Sendable {
         case .fetch: return "arrow.clockwise"
         case .switchBranch: return "arrow.triangle.branch"
         case .clone: return "square.on.square"
+        case .initialize: return "folder.badge.plus"
+        case .stash: return "archivebox"
+        case .tags: return "tag"
+        case .remotes: return "network"
+        case .tools: return "wrench.and.screwdriver"
         default: return "sparkles"
         }
     }
@@ -99,5 +114,18 @@ struct LaunchRequest: Sendable {
             return URL(fileURLWithPath: path).deletingLastPathComponent().path
         }
         return path
+    }
+
+    static func inputPath(_ input: String) throws -> String {
+        var path = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        if path.count >= 2, let first = path.first, first == path.last, first == "\"" || first == "'" {
+            path = String(path.dropFirst().dropLast())
+        }
+        if path.hasPrefix("file://"), let url = URL(string: path), url.isFileURL { path = url.path }
+        path = NSString(string: path).expandingTildeInPath
+        guard path.hasPrefix("/"), !path.contains("\0") else {
+            throw NSError(domain: "GitNebula", code: 1, userInfo: [NSLocalizedDescriptionKey: "フォルダの絶対パスを入力してください（例: ~/Projects/my-repo）。"])
+        }
+        return URL(fileURLWithPath: path).standardizedFileURL.path
     }
 }

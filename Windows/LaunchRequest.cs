@@ -31,6 +31,16 @@ public sealed record LaunchRequest(string Action, string[] Paths)
         return new(action, paths.Select(Path.GetFullPath).ToArray());
     }
     public static string DirectoryFor(string path) => File.Exists(path) ? Path.GetDirectoryName(path)! : path;
+    public static string InputPath(string input)
+    {
+        var path = input.Trim();
+        if (path.Length >= 2 && path[0] == path[^1] && path[0] is '\"' or '\'') path = path[1..^1];
+        if (Uri.TryCreate(path, UriKind.Absolute, out var uri) && uri.IsFile) path = uri.LocalPath;
+        if (path == "~" || path.StartsWith("~/") || path.StartsWith("~\\"))
+            path = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + path[1..];
+        if (!System.IO.Path.IsPathFullyQualified(path)) throw new ArgumentException("フォルダの絶対パスを入力してください。");
+        return System.IO.Path.GetFullPath(path);
+    }
     public bool Includes(string file, string root)
     {
         var target = Path.GetFullPath(Path.Combine(root, file));

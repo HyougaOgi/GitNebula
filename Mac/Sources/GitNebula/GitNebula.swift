@@ -12,11 +12,13 @@ struct Snapshot: Sendable {
     let conflicts: [String]
     let merging: Bool
     let preferredRemote: String
+    let sequence: GitSequence?
     init(_ repo: GitRepository) throws {
         self.repo = repo; changes = try repo.changes()
         branch = (try? repo.run(["symbolic-ref", "--short", "HEAD"]))?.trimmingCharacters(in: .newlines) ?? "detached HEAD"
         graph = try repo.graph(); branches = try repo.branches(); remotes = try repo.remotes()
         conflicts = try repo.conflicts(); merging = try repo.mergeInProgress(); preferredRemote = try repo.preferredRemote()
+        sequence = try repo.sequence()
     }
 }
 
@@ -43,6 +45,8 @@ final class Workspace: ObservableObject {
     @Published var failed = false
     @Published var cloneSource = ""
     @Published var cloneDestination = ""
+    @Published var repositoryPath = ""
+    @Published var sequence: GitSequence?
     private var request = LaunchRequest(action: .open, paths: [])
     private var initialSelection = true
     var visibleChanges: [Change] {
@@ -51,6 +55,7 @@ final class Workspace: ObservableObject {
     func apply(_ state: Snapshot) {
         repository = state.repo; changes = state.changes; branch = state.branch; graph = state.graph
         branches = state.branches; remotes = state.remotes; conflicts = state.conflicts; merging = state.merging
+        sequence = state.sequence
         chosenBranch = branches.contains(chosenBranch) ? chosenBranch : branches.first(where: { $0 != branch }) ?? branch
         if !remotes.contains(chosenRemote) { chosenRemote = state.preferredRemote }
         if !conflicts.contains(chosenConflict) { chosenConflict = conflicts.first ?? "" }
@@ -76,13 +81,16 @@ final class Workspace: ObservableObject {
         guard !busy else { return }
         request = newRequest; action = request.action; initialSelection = true
         repository = nil; changes = []; selected = []; conflicts = []; merging = false; chosenRemote = ""; chosenBranch = ""
+        sequence = nil
         message = ""; diff = "ファイルを選ぶと差分が表示されます。"; status = "準備完了"; succeeded = false; failed = false
         if action == .clone {
             let parent = request.paths.first.map(LaunchRequest.directory) ?? NSHomeDirectory()
             cloneDestination = URL(fileURLWithPath: parent).appendingPathComponent("new-repository").path
             return
         }
+        if action == .initialize { repositoryPath = request.paths.first.map(LaunchRequest.directory) ?? repositoryPath; return }
         guard let path = request.paths.first else { return }
+        repositoryPath = path
         let paths = request.paths
         perform({
             let repo = try GitRepository.open(LaunchRequest.directory(for: path))
@@ -102,7 +110,23 @@ final class Workspace: ObservableObject {
     }
     func chooseRepository() {
         let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
-        if panel.runModal() == .OK, let url = panel.url { launch(LaunchRequest(action: action, paths: [url.path])) }
+        panel.title = "Git リポジトリを選択"; panel.prompt = "開く"
+        if let path = try? LaunchRequest.inputPath(repositoryPath) { panel.directoryURL = URL(fileURLWithPath: path) }
+        if panel.runModal() == .OK, let url = panel.url { repositoryPath = url.path; openEnteredPath() }
+    }
+    func openEnteredPath() {
+        guard !busy else { return }
+        do {
+            let path = try LaunchRequest.inputPath(repositoryPath)
+            launch(LaunchRequest(action: action, paths: [path]))
+        } catch { status = error.localizedDescription; failed = true; succeeded = false }
+    }
+    func initializeRepository() {
+        let path = repositoryPath
+        perform({ try Snapshot(GitRepository.initialize(path)) }, success: "リポジトリを作成しました。ファイルを追加してコミットできます。") { state in
+            self.request = LaunchRequest(action: .open, paths: [state.repo.path]); self.action = .open; self.initialSelection = true
+            self.repositoryPath = state.repo.path; self.apply(state)
+        }
     }
     func selectAction(_ value: GitAction) {
         action = value; selected.formIntersection(Set(visibleChanges.map(\.path))); status = "準備完了"; succeeded = false; failed = false
@@ -197,6 +221,7 @@ struct ContentView: View {
                 Label(model.action.title, systemImage: model.action.symbol).font(.title.bold())
                 Text(model.action.hint).foregroundStyle(.secondary)
             }
+            if model.action != .clone { repositoryForm }
             if let repo = model.repository, model.action != .clone {
                 HStack {
                     Label(URL(fileURLWithPath: repo.path).lastPathComponent, systemImage: "folder")
@@ -207,6 +232,10 @@ struct ContentView: View {
                 Text(repo.path).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
             }
             if model.action == .clone { cloneForm }
+            else if model.action == .initialize {
+                Text("上の欄に作成済みフォルダのパスを入力するか、「参照…」で選び、リポジトリを作成してください。既存リポジトリ内には作成しません。")
+                Button("このフォルダにリポジトリを作成", action: model.initializeRepository).buttonStyle(.borderedProminent).disabled(model.repositoryPath.isEmpty)
+            }
             else if model.action == .open { launcher }
             else if model.repository == nil {
                 VStack(spacing: 18) {
@@ -219,7 +248,8 @@ struct ContentView: View {
                 if model.action == .switchBranch || model.action == .workspace { branchForm }
                 if filesAction { filePanel }
                 if model.action == .log { codePanel(model.graph) }
-                if model.merging || !model.conflicts.isEmpty { conflictForm }
+                if [.stash, .tags, .remotes, .tools].contains(model.action) { RepositoryToolsView(model: model).id(model.action) }
+                if model.sequence != nil || !model.conflicts.isEmpty { conflictForm }
                 if model.action == .commit || model.action == .workspace {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("コミットメッセージ").font(.headline)
@@ -228,7 +258,7 @@ struct ContentView: View {
                             Text("\(model.selected.count) ファイルを選択").foregroundStyle(.secondary)
                             Spacer()
                             Button("コミット", action: model.commit).buttonStyle(.borderedProminent).keyboardShortcut(.return, modifiers: .command)
-                                .disabled(model.selected.isEmpty || model.message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.merging)
+                                .disabled(model.selected.isEmpty || model.message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.sequence != nil)
                         }
                     }
                 }
@@ -248,7 +278,7 @@ struct ContentView: View {
                 Button("閉じる") { if let closeWindow { closeWindow() } else { dismiss() } }.keyboardShortcut(.cancelAction)
             }
         }
-        .padding(24).frame(minWidth: 660, idealWidth: 880, minHeight: filesAction || model.action == .log ? 640 : 470)
+        .padding(24).frame(minWidth: 720, idealWidth: 920, minHeight: filesAction || [.open, .log, .stash, .tags, .remotes, .tools].contains(model.action) ? 720 : 520)
         .background(NebulaBackground()).foregroundStyle(Color(red: 0.91, green: 0.92, blue: 0.98)).disabled(model.busy).tint(accent).environment(\.colorScheme, .dark).preferredColorScheme(.dark)
         .sheet(isPresented: $showEditor) {
             VStack {
@@ -262,16 +292,29 @@ struct ContentView: View {
         }
     }
     private var launcher: some View {
+        ScrollView {
         VStack(alignment: .leading, spacing: 16) {
-            if model.repository == nil { Button("リポジトリのフォルダを選択", action: model.chooseRepository).buttonStyle(.borderedProminent) }
+            FinderIntegrationView()
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                 ForEach(GitAction.allCases.filter { $0 != .open && $0 != .workspace }, id: \.self) { action in
                     Button { model.selectAction(action) } label: {
                         Label(action.title, systemImage: action.symbol).frame(maxWidth: .infinity, alignment: .leading).padding(12)
-                    }.buttonStyle(.bordered).disabled(model.repository == nil && action != .clone)
+                    }.buttonStyle(.bordered).disabled(model.repository == nil && ![.clone, .initialize].contains(action))
                 }
             }
-            Text("普段の操作は Finder → 右クリック → GitNebula から。").font(.callout).foregroundStyle(.secondary)
+        }
+        }
+    }
+    private var repositoryForm: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("リポジトリのパス").font(.caption).foregroundStyle(.secondary)
+            HStack {
+                TextField("~/Projects/my-repo", text: $model.repositoryPath)
+                    .textFieldStyle(.roundedBorder).accessibilityIdentifier("repositoryPath")
+                    .onSubmit { model.openEnteredPath() }
+                if model.action != .initialize { Button("開く", action: model.openEnteredPath).disabled(model.repositoryPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
+                Button("参照…", action: model.chooseRepository)
+            }
         }
     }
     private var cloneForm: some View {
@@ -287,11 +330,12 @@ struct ContentView: View {
     }
     private var remoteForm: some View {
         VStack(alignment: .leading, spacing: 16) {
-            if model.remotes.isEmpty { Text("リモートが未設定です。取得元がある場合は Clone から始めてください。").foregroundStyle(.orange) }
+            if model.remotes.isEmpty { Text("リモートが未設定です。送受信先の URL を登録してください。").foregroundStyle(.orange) }
             else {
                 Picker("リモート", selection: $model.chosenRemote) { ForEach(model.remotes, id: \.self) { Text($0).tag($0) } }
                 Button(model.action.title, action: model.runAction).buttonStyle(.borderedProminent).disabled(model.succeeded)
             }
+            Button("リモートを設定") { model.selectAction(.remotes) }
         }.padding(20).background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
     }
     private var branchForm: some View {
@@ -317,6 +361,17 @@ struct ContentView: View {
                     Button("すべて選択") { model.selected = Set(model.visibleChanges.map(\.path)) }
                     Button("選択解除") { model.selected.removeAll() }
                 }
+            }
+            if model.action != .diff {
+                HStack {
+                    Button("ステージ") { let files = Array(model.selected); model.operation { try $0.stage(files) } }
+                    Button("ステージ解除") { let files = Array(model.selected); model.operation { try $0.unstage(files) } }
+                    Button("無視リストに追加") { let files = Array(model.selected); model.operation { try $0.ignore(files) } }
+                    Button("変更を破棄") {
+                        let files = Array(model.selected)
+                        confirm("選択した \(files.count) ファイルの変更を破棄し、HEAD の内容に戻します。未コミットの変更は復元できません。") { model.operation { try $0.discard(files) } }
+                    }
+                }.disabled(model.selected.isEmpty || model.sequence != nil)
             }
             if model.visibleChanges.isEmpty { Text("対象に未コミットの変更はありません。").padding(24).frame(maxWidth: .infinity) }
             else {
@@ -346,7 +401,7 @@ struct ContentView: View {
     }
     private var conflictForm: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(model.conflicts.isEmpty ? "競合は解決済みです。マージを完了してください。" : "競合があります。解決後にマージを完了してください。").foregroundStyle(.orange)
+            Text(model.conflicts.isEmpty ? "競合はありません。\(model.sequence?.title ?? "操作") を完了してください。" : "競合があります。内容を確認して解決してください。").foregroundStyle(.orange)
             if !model.conflicts.isEmpty {
                 Picker("競合", selection: $model.chosenConflict) { ForEach(model.conflicts, id: \.self) { Text($0).tag($0) } }
                 HStack {
@@ -361,6 +416,12 @@ struct ContentView: View {
                 HStack {
                     Button("マージ完了") { prompt("マージコミット（ステージ済みの全変更を含みます）", ["コミットメッセージ"]) { values in model.operation { try $0.finishMerge(values[0]) } } }.disabled(!model.conflicts.isEmpty)
                     Button("マージ中止") { confirm("競合解決作業を破棄してマージを中止します。") { model.operation { try $0.abortMerge() } } }
+                }
+            }
+            if let sequence = model.sequence, sequence != .merge {
+                HStack {
+                    Button("\(sequence.title) を再開") { model.operation { try $0.continueSequence() } }.disabled(!model.conflicts.isEmpty)
+                    Button("\(sequence.title) を中止") { confirm("競合解決作業を破棄して \(sequence.title) を中止します。") { model.operation { try $0.abortSequence() } } }
                 }
             }
         }
@@ -383,6 +444,7 @@ final class ActionWindows: NSObject, NSWindowDelegate {
         let controller = NSWindowController(window: window)
         windows[ObjectIdentifier(window)] = (controller, model)
         model.launch(request); window.center(); controller.showWindow(nil); window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
     func windowShouldClose(_ sender: NSWindow) -> Bool { !(windows[ObjectIdentifier(sender)]?.1.busy ?? false) }
     func windowWillClose(_ notification: Notification) {
@@ -392,6 +454,7 @@ final class ActionWindows: NSObject, NSWindowDelegate {
 
 @main
 struct GitNebulaApp: App {
+    @NSApplicationDelegateAdaptor(ApplicationDelegate.self) private var appDelegate
     @StateObject private var model = Workspace()
     @State private var handledArguments = false
     var body: some Scene {
@@ -412,6 +475,22 @@ struct GitNebulaApp: App {
                     catch { model.status = error.localizedDescription; model.failed = true }
                 }
         }.windowStyle(.titleBar).defaultSize(width: 880, height: 640)
-        .commands { CommandGroup(replacing: .newItem) { } }
+        .commands {
+            CommandGroup(replacing: .newItem) {
+                Button("リポジトリを開く…", action: model.chooseRepository).keyboardShortcut("o")
+                Button("新しい操作ウィンドウ") { ActionWindows.shared.open(LaunchRequest(action: .open, paths: [])) }.keyboardShortcut("n")
+            }
+        }
+    }
+}
+
+@MainActor
+final class ApplicationDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // A SwiftPM executable is not launched by LaunchServices. It still needs
+        // a regular, active application to accept keyboard input and paste.
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.windows.first(where: { $0.canBecomeKey })?.makeKeyAndOrderFront(nil)
     }
 }

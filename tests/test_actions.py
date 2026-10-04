@@ -29,7 +29,7 @@ class ActionTests(unittest.TestCase):
     def test_install_upgrade_and_uninstall(self):
         installer = pathlib.Path(__file__).resolve().parents[1] / 'Linux/install.py'
         with tempfile.TemporaryDirectory(prefix='nebula install ') as temporary:
-            prefix = pathlib.Path(temporary) / "space '星 $folder"
+            prefix = pathlib.Path(temporary).resolve() / "space '星 $folder"
             def install(*args):
                 subprocess.run([sys.executable, str(installer), '--prefix', str(prefix), *args], check=True, capture_output=True)
             install(); install()
