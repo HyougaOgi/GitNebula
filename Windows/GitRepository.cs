@@ -22,7 +22,7 @@ public sealed class GitRepository(string path)
     public async Task Open() => Path = (await Run("rev-parse", "--show-toplevel")).TrimEnd('\r', '\n');
     public async Task<List<Change>> Changes()
     {
-        var entries = (await Run("status", "--porcelain=v1", "-z")).Split('\0');
+        var entries = (await Run("status", "--porcelain=v1", "-z", "--untracked-files=all")).Split('\0');
         var result = new List<Change>();
         for (var i = 0; i < entries.Length; i++)
         {
@@ -41,7 +41,9 @@ public sealed class GitRepository(string path)
     }
     public async Task<string> Diff(string file)
     {
-        if (!(await Changes()).Any(item => item.Path == file)) throw new InvalidOperationException("変更一覧にないファイルです。");
+        var changes = await Changes();
+        if (!changes.Any(item => item.Path == file)) throw new InvalidOperationException("変更一覧にないファイルです。");
+        if (changes.Any(item => item.Path == file && item.Code == "??")) return ReadFile(file);
         try { await Run("rev-parse", "--verify", "HEAD"); }
         catch (InvalidOperationException) { return "初回コミット前のファイルです。"; }
         var text = await Run("--literal-pathspecs", "diff", "HEAD", "--", file);
@@ -49,6 +51,7 @@ public sealed class GitRepository(string path)
     }
     public async Task Commit(string[] paths, string message)
     {
+        if ((await Conflicts()).Length > 0 || await MergeInProgress()) throw new InvalidOperationException("競合を解決し、「マージ完了」を使ってください。");
         var changes = await Changes();
         var available = changes.Select(item => item.Path).ToHashSet();
         if (paths.Length == 0 || paths.Any(path => !available.Contains(path)) || string.IsNullOrWhiteSpace(message)) throw new InvalidOperationException("変更ファイルとメッセージを指定してください。");
@@ -68,5 +71,118 @@ public sealed class GitRepository(string path)
         try { _ = File.GetAttributes(System.IO.Path.Combine(Path, file)); return true; }
         catch (FileNotFoundException) { return false; }
         catch (DirectoryNotFoundException) { return false; }
+    }
+    public static async Task<GitRepository> Clone(string source, string destination)
+    {
+        if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(destination)) throw new InvalidOperationException("取得元と作成先を指定してください。");
+        var target = System.IO.Path.GetFullPath(destination);
+        if (File.Exists(target) || Directory.Exists(target)) throw new InvalidOperationException("存在しない作成先フォルダを指定してください。");
+        var runner = new GitRepository(System.IO.Path.GetDirectoryName(target)!);
+        await runner.Run("clone", "--", source, target);
+        var repo = new GitRepository(target); await repo.Open(); return repo;
+    }
+    public async Task<string> Graph() => string.IsNullOrWhiteSpace(await Run("rev-list", "--all", "--max-count=1")) ? "まだコミットはありません。" : await Run("log", "--graph", "--all", "--decorate", "--oneline", "-100", "--no-color");
+    public async Task<string[]> Branches() => (await Run("for-each-ref", "--format=%(refname:short)", "refs/heads")).Split('\n', StringSplitOptions.RemoveEmptyEntries);
+    public async Task<string[]> Remotes() => (await Run("remote")).Split('\n', StringSplitOptions.RemoveEmptyEntries);
+    private async Task<string> Remote(string name)
+    {
+        if (name.StartsWith('-') || !(await Remotes()).Contains(name)) throw new InvalidOperationException("登録済みのリモートを指定してください。");
+        return name;
+    }
+    private async Task<string> ValidateBranch(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || name.StartsWith('-')) throw new InvalidOperationException("有効なブランチ名を指定してください。");
+        await Run("check-ref-format", "--branch", name); return name;
+    }
+    private async Task RequireClean()
+    {
+        if ((await Changes()).Count > 0 || await MergeInProgress()) throw new InvalidOperationException("変更をコミットし、進行中のマージを完了してください。");
+    }
+    public async Task Fetch(string remote) => await Run("fetch", "--prune", await Remote(remote));
+    public async Task Pull(string remote)
+    {
+        await RequireClean(); var branch = await ValidateBranch((await Run("symbolic-ref", "--short", "HEAD")).Trim());
+        await Run("pull", "--ff-only", await Remote(remote), branch);
+    }
+    public async Task Push(string remote)
+    {
+        var branch = await ValidateBranch((await Run("symbolic-ref", "--short", "HEAD")).Trim());
+        await Run("push", "--set-upstream", await Remote(remote), $"HEAD:refs/heads/{branch}");
+    }
+    public async Task CreateBranch(string name) { await RequireClean(); await Run("switch", "-c", await ValidateBranch(name)); }
+    public async Task SwitchBranch(string name)
+    {
+        await RequireClean(); if (!(await Branches()).Contains(name)) throw new InvalidOperationException("ローカルブランチを選択してください。");
+        await Run("switch", "--", await ValidateBranch(name));
+    }
+    public async Task RenameBranch(string oldName, string newName) => await Run("branch", "-m", await ValidateBranch(oldName), await ValidateBranch(newName));
+    public async Task DeleteBranch(string name) => await Run("branch", "-d", "--", await ValidateBranch(name));
+    public async Task Merge(string name) { await RequireClean(); await Run("merge", "--no-edit", "--", await ValidateBranch(name)); }
+    public async Task<string[]> Conflicts() => (await Run("diff", "--name-only", "--diff-filter=U", "-z")).Split('\0', StringSplitOptions.RemoveEmptyEntries);
+    public async Task<bool> MergeInProgress() => File.Exists((await Run("rev-parse", "--path-format=absolute", "--git-path", "MERGE_HEAD")).TrimEnd('\r', '\n'));
+    private string FilePath(string file)
+    {
+        var root = System.IO.Path.GetFullPath(Path).TrimEnd(System.IO.Path.DirectorySeparatorChar) + System.IO.Path.DirectorySeparatorChar;
+        var target = System.IO.Path.GetFullPath(System.IO.Path.Combine(root, file));
+        if (System.IO.Path.IsPathRooted(file) || !target.StartsWith(root, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("リポジトリ内のファイルを指定してください。");
+        for (var parent = System.IO.Path.GetDirectoryName(target); parent != null && parent.Length >= root.Length; parent = System.IO.Path.GetDirectoryName(parent))
+            if ((File.GetAttributes(parent) & FileAttributes.ReparsePoint) != 0) throw new InvalidOperationException("リンク先のファイルは外部で操作してください。");
+        return target;
+    }
+    public string ReadFile(string file, bool editable = false)
+    {
+        var target = FilePath(file);
+        if (!EntryExists(file)) return "";
+        if ((File.GetAttributes(target) & FileAttributes.ReparsePoint) != 0)
+        {
+            if (editable) throw new InvalidOperationException("リンクは外部で解決してください。");
+            return "シンボリックリンク → " + new FileInfo(target).LinkTarget;
+        }
+        if (new FileInfo(target).Length > 1024 * 1024)
+        {
+            if (editable) throw new InvalidOperationException("1 MiB を超えるファイルは外部で解決してください。");
+            return "プレビュー上限の 1 MiB を超えています。";
+        }
+        var bytes = File.ReadAllBytes(target);
+        if (bytes.Contains((byte)0))
+        {
+            if (editable) throw new InvalidOperationException("バイナリファイルは外部で解決してください。");
+            return "バイナリファイルです。";
+        }
+        try { return new System.Text.UTF8Encoding(false, true).GetString(bytes); }
+        catch (System.Text.DecoderFallbackException)
+        {
+            if (editable) throw new InvalidOperationException("UTF-8 以外のファイルは外部で解決してください。");
+            return "注意: UTF-8 で読めない文字を置き換えて表示しています。\n\n" + System.Text.Encoding.UTF8.GetString(bytes);
+        }
+    }
+    public async Task<string> ConflictText(string file)
+    {
+        if (!(await Conflicts()).Contains(file)) throw new InvalidOperationException("競合中のファイルを選択してください。");
+        return ReadFile(file, true);
+    }
+    public async Task SaveResolution(string file, string text)
+    {
+        await ConflictText(file);
+        if (text.Split('\n').Any(line => line.StartsWith("<<<<<<< ") || line.StartsWith("=======") || line.StartsWith(">>>>>>> "))) throw new InvalidOperationException("競合マーカーを取り除いてください。");
+        var target = FilePath(file); var temporary = target + ".gitnebula-" + Guid.NewGuid();
+        try { await File.WriteAllTextAsync(temporary, text, new System.Text.UTF8Encoding(false)); File.Move(temporary, target, true); }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        await MarkResolved(file);
+    }
+    public async Task MarkResolved(string file)
+    {
+        if (!(await Conflicts()).Contains(file)) throw new InvalidOperationException("競合中のファイルを選択してください。");
+        await Run("--literal-pathspecs", "add", "-A", "--", file);
+    }
+    public async Task FinishMerge(string message)
+    {
+        if (!await MergeInProgress() || (await Conflicts()).Length > 0 || string.IsNullOrWhiteSpace(message)) throw new InvalidOperationException("競合を解決し、コミットメッセージを入力してください。");
+        await Run("commit", "-m", message);
+    }
+    public async Task AbortMerge()
+    {
+        if (!await MergeInProgress()) throw new InvalidOperationException("進行中のマージはありません。");
+        await Run("merge", "--abort");
     }
 }

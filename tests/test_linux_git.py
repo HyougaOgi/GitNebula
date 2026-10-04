@@ -125,5 +125,93 @@ class GitTests(unittest.TestCase):
                 self.assertEqual(repo.path, str(root))
                 self.assertEqual(repo.changes(), [])
 
+    def initial(self):
+        (self.root / 'orbit.txt').write_text('base\n')
+        self.repo.commit(['orbit.txt'], 'initial')
+        return self.repo.branch()
+
+    def test_untracked_preview_binary_limit_and_symlink(self):
+        (self.root / 'nested').mkdir()
+        (self.root / 'nested' / '日本語.txt').write_text('Hello 星雲\n')
+        self.assertIn('Hello 星雲', self.repo.diff('nested/日本語.txt'))
+        (self.root / 'binary').write_bytes(b'a\0b')
+        self.assertIn('バイナリ', self.repo.diff('binary'))
+        (self.root / 'large').write_bytes(b'x' * (1024 * 1024 + 1))
+        self.assertIn('1 MiB', self.repo.diff('large'))
+        (self.root / 'link').symlink_to('/nonexistent/external')
+        self.assertIn('シンボリックリンク', self.repo.diff('link'))
+
+    def test_branch_lifecycle_and_graph(self):
+        self.assertIn('ありません', self.repo.graph())
+        base = self.initial()
+        self.repo.create_branch('feature/orbit')
+        self.assertEqual(self.repo.branch(), 'feature/orbit')
+        self.repo.rename_branch('feature/orbit', 'feature/stars')
+        self.repo.switch_branch(base)
+        self.repo.delete_branch('feature/stars')
+        self.assertEqual(self.repo.branches(), [base])
+        self.assertIn('initial', self.repo.graph())
+        (self.root / 'orbit.txt').write_text('dirty\n')
+        with self.assertRaises(ValueError): self.repo.create_branch('blocked')
+        with self.assertRaises(ValueError): self.repo.switch_branch(base)
+        with self.assertRaises(ValueError): self.repo.validate_branch('--help')
+
+    def test_clone_fetch_push_pull_against_local_remote(self):
+        base = self.initial()
+        with tempfile.TemporaryDirectory(prefix='gitnebula-remotes-') as temporary:
+            remote = pathlib.Path(temporary) / 'remote.git'
+            subprocess.run(['git', 'init', '--bare', '-q', str(remote)], check=True)
+            subprocess.run(['git', '-C', str(remote), 'symbolic-ref', 'HEAD', 'refs/heads/' + base], check=True)
+            self.git('remote', 'add', 'origin', str(remote))
+            self.repo.push('origin')
+            clone = Repository.clone(str(remote), str(pathlib.Path(temporary) / 'clone with spaces'))
+            self.assertEqual(clone.branches(), [base])
+            clone.run('config', 'user.name', 'Test'); clone.run('config', 'user.email', 'test@example.invalid')
+            (pathlib.Path(clone.path) / 'orbit.txt').write_text('from clone\n')
+            clone.commit(['orbit.txt'], 'remote update'); clone.push('origin')
+            self.repo.fetch('origin'); self.repo.pull('origin')
+            self.assertEqual((self.root / 'orbit.txt').read_text(), 'from clone\n')
+            self.assertIn('remote update', self.repo.graph())
+            with self.assertRaises(ValueError): self.repo.fetch('--all')
+            with self.assertRaises(ValueError): Repository.clone(str(remote), clone.path)
+            # Divergence must be reported without creating a merge or discarding work.
+            (self.root / 'orbit.txt').write_text('local divergence\n'); self.repo.commit(['orbit.txt'], 'local')
+            (pathlib.Path(clone.path) / 'orbit.txt').write_text('remote divergence\n'); clone.commit(['orbit.txt'], 'remote'); clone.push('origin')
+            head = self.git('rev-parse', 'HEAD')
+            with self.assertRaises(RuntimeError): self.repo.pull('origin')
+            self.assertEqual(self.git('rev-parse', 'HEAD'), head)
+
+    def make_conflict(self):
+        base = self.initial()
+        self.repo.create_branch('incoming')
+        (self.root / 'orbit.txt').write_text('incoming\n'); self.repo.commit(['orbit.txt'], 'incoming')
+        self.repo.switch_branch(base)
+        (self.root / 'orbit.txt').write_text('current\n'); self.repo.commit(['orbit.txt'], 'current')
+        with self.assertRaises(RuntimeError): self.repo.merge('incoming')
+        self.assertEqual(self.repo.conflicts(), ['orbit.txt'])
+
+    def test_conflict_edit_stage_and_finish_merge(self):
+        self.make_conflict()
+        self.assertTrue(self.repo.merge_in_progress())
+        text = self.repo.conflict_text('orbit.txt')
+        self.assertIn('<<<<<<<', text)
+        with self.assertRaises(ValueError): self.repo.save_resolution('orbit.txt', text)
+        with self.assertRaises(ValueError): self.repo.commit(['orbit.txt'], 'not a merge')
+        self.repo.save_resolution('orbit.txt', 'resolved\n')
+        self.assertEqual(self.repo.conflicts(), [])
+        self.repo.finish_merge('merge resolved')
+        self.assertFalse(self.repo.merge_in_progress())
+        self.assertEqual(len(self.git('rev-list', '--parents', '-1', 'HEAD').split()), 3)
+        self.assertEqual((self.root / 'orbit.txt').read_text(), 'resolved\n')
+        self.assertIn('incoming', self.repo.graph())
+
+    def test_conflict_external_deletion_and_abort(self):
+        self.make_conflict(); self.repo.abort_merge()
+        self.assertEqual((self.root / 'orbit.txt').read_text(), 'current\n')
+        with self.assertRaises(RuntimeError): self.repo.merge('incoming')
+        (self.root / 'orbit.txt').unlink(); self.repo.mark_resolved('orbit.txt')
+        self.repo.finish_merge('resolved by deletion')
+        self.assertFalse((self.root / 'orbit.txt').exists())
+
 
 if __name__ == '__main__': unittest.main()

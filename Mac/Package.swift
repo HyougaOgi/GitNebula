@@ -4,5 +4,5 @@ let package = Package(
     name: "GitNebula",
     platforms: [.macOS(.v13)],
     products: [.executable(name: "GitNebula", targets: ["GitNebula"])],
-    targets: [.executableTarget(name: "GitNebula")]
+    targets: [.executableTarget(name: "GitNebula"), .testTarget(name: "GitNebulaTests", dependencies: ["GitNebula"])]
 )
