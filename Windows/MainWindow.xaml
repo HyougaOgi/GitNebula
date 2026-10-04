@@ -1,15 +1,26 @@
-<Window x:Class="GitNebula.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="GitNebula" Width="1100" Height="740" MinWidth="900" MinHeight="650" Background="#090D1D" Foreground="#E9EAFA">
-  <Grid Margin="24" x:Name="Workspace">
-    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-    <DockPanel><StackPanel><TextBlock Text="✧ GitNebula" FontSize="30" FontWeight="Bold" Foreground="#B39DFF"/><TextBlock Text="YOUR CODE, IN ORBIT" Foreground="#9CA8C7" Margin="0,8"/></StackPanel><StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><Button Content="リポジトリを開く" Click="Open_Click"/><Button Content="更新" Click="Refresh_Click"/></StackPanel></DockPanel>
-    <TextBlock Grid.Row="1" x:Name="Location" Text="コードの軌跡を、ひとつの星図に。" Margin="0,16" TextWrapping="Wrap"/>
-    <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition Width="350"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-      <ScrollViewer Background="#151B31"><StackPanel x:Name="Files"/></ScrollViewer>
-      <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Center" Background="#30264E"/>
-      <TextBox Grid.Column="2" x:Name="DiffView" Text="ファイルを選択すると差分を表示します。" IsReadOnly="True" FontFamily="Consolas" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"/>
-    </Grid>
-    <TextBox Grid.Row="3" x:Name="Message" Margin="0,16,0,8" ToolTip="コミットメッセージ" AutomationProperties.Name="コミットメッセージ"/>
-    <Button Grid.Row="4" Content="✧ 選択した変更をコミット" Click="Commit_Click" HorizontalAlignment="Left"/>
-    <TextBlock Grid.Row="5" x:Name="Status" Text="準備完了" Foreground="#9CA8C7" TextWrapping="Wrap" Margin="0,12,0,0"/>
-  </Grid>
+<Window x:Class="GitNebula.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="GitNebula" Width="1200" Height="900" MinWidth="1040" MinHeight="760" Background="#090D1D" Foreground="#E9EAFA">
+  <DockPanel Margin="24" x:Name="Workspace">
+    <StackPanel DockPanel.Dock="Top">
+      <DockPanel><StackPanel><TextBlock Text="✧ GitNebula" FontSize="30" FontWeight="Bold" Foreground="#B39DFF"/><TextBlock Text="YOUR CODE, IN ORBIT" Foreground="#9CA8C7" Margin="0,8"/></StackPanel><StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><Button Content="リポジトリを開く" Click="Open_Click"/><Button Content="Clone" Click="Clone_Click"/><Button Content="更新" Click="Refresh_Click"/></StackPanel></DockPanel>
+      <WrapPanel><ComboBox x:Name="RemoteChoice" Width="180" Margin="4"/><Button Content="Fetch" Click="Fetch_Click"/><Button Content="Pull (FF)" Click="Pull_Click"/><Button Content="Push" Click="Push_Click"/></WrapPanel>
+      <WrapPanel><ComboBox x:Name="BranchChoice" Width="240" Margin="4"/><Button Content="切替" Click="Switch_Click"/><Button Content="作成" Click="CreateBranch_Click"/><Button Content="名前変更" Click="RenameBranch_Click"/><Button Content="削除" Click="DeleteBranch_Click"/><Button Content="マージ" Click="Merge_Click"/></WrapPanel>
+      <TextBlock x:Name="Location" Text="コードの軌跡を、ひとつの星図に。" Margin="0,12" TextWrapping="Wrap"/>
+    </StackPanel>
+    <StackPanel DockPanel.Dock="Bottom">
+      <WrapPanel><ComboBox x:Name="ConflictChoice" Width="230" Margin="4"/><Button Content="競合を編集" Click="EditConflict_Click"/><Button Content="外部で解決済み" Click="MarkResolved_Click"/><Button Content="マージ完了" Click="FinishMerge_Click"/><Button Content="マージ中止" Click="AbortMerge_Click"/></WrapPanel>
+      <TextBox x:Name="Message" Margin="0,12,0,8" ToolTip="コミットメッセージ" AutomationProperties.Name="コミットメッセージ"/>
+      <Button Content="✧ 選択した変更をコミット" Click="Commit_Click" HorizontalAlignment="Left"/>
+      <TextBlock x:Name="Status" Text="準備完了" Foreground="#9CA8C7" TextWrapping="Wrap" Margin="0,12,0,0"/>
+    </StackPanel>
+    <TabControl Background="#151B31">
+      <TabItem Header="変更 / 差分">
+        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="350"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+          <ScrollViewer Background="#151B31"><StackPanel x:Name="Files"/></ScrollViewer>
+          <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Center" Background="#30264E"/>
+          <TextBox Grid.Column="2" x:Name="DiffView" Text="ファイルを選択すると差分を表示します。" IsReadOnly="True" FontFamily="Consolas" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"/>
+        </Grid>
+      </TabItem>
+      <TabItem Header="履歴グラフ"><TextBox x:Name="History" IsReadOnly="True" FontFamily="Consolas" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"/></TabItem>
+    </TabControl>
+  </DockPanel>
 </Window>

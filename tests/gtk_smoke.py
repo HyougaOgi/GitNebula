@@ -42,5 +42,26 @@ with tempfile.TemporaryDirectory(prefix='gitnebula-ui-') as directory:
     text = buffer.get_text(buffer.get_start_iter(), buffer.get_end_iter(), False)
     assert 'UTF-8' in text and '+caf\ufffd updated' in text
     assert file.read_bytes() == b'caf\xe9 updated\n'
+    file.write_text('second\n')
+    window.task(window.snapshot, window.render); wait()
+    assert 'UI commit' in window.history.get_buffer().get_text(window.history.get_buffer().get_start_iter(), window.history.get_buffer().get_end_iter(), False)
+    base = repo.branch()
+    window.operate(lambda: repo.create_branch('incoming')); wait()
+    file.write_text('incoming\n'); repo.commit(['orbit.txt'], 'incoming')
+    repo.switch_branch(base); file.write_text('current\n'); repo.commit(['orbit.txt'], 'current')
+    # A failed merge must refresh the conflict controls before displaying its error.
+    window.operate(lambda: repo.merge('incoming'))
+    deadline = time.monotonic() + 10
+    context = GLib.MainContext.default()
+    while window.busy and time.monotonic() < deadline:
+        while context.pending(): context.iteration(False)
+        time.sleep(.01)
+    assert not window.busy
+    assert window.conflict_choice.get_active_text() == 'orbit.txt'
+    window.operate(lambda: repo.save_resolution('orbit.txt', 'resolved\n')); wait()
+    window.message.set_text('GUI merge')
+    window.finish_merge(); wait()
+    assert not repo.merge_in_progress()
+    assert git('log', '-1', '--format=%s').strip() == 'GUI merge'
     window.close(); app.quit()
-    print('PASS: GTK window, selection, diff, commit, refresh, non-UTF-8 diff')
+    print('PASS: GTK window, selection, diff, commit, preview, history, branches, conflict refresh and merge completion')
