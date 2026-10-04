@@ -1,0 +1,6 @@
+<Application x:Class="GitNebula.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" StartupUri="MainWindow.xaml">
+  <Application.Resources>
+    <Style TargetType="Button"><Setter Property="Padding" Value="14,9"/><Setter Property="Margin" Value="4"/><Setter Property="Background" Value="#30264E"/><Setter Property="Foreground" Value="#E9EAFA"/></Style>
+    <Style TargetType="TextBox"><Setter Property="Background" Value="#151B31"/><Setter Property="Foreground" Value="#E9EAFA"/><Setter Property="CaretBrush" Value="#B39DFF"/><Setter Property="Padding" Value="10"/></Style>
+  </Application.Resources>
+</Application>
