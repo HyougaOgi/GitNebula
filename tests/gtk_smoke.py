@@ -6,6 +6,7 @@ import tempfile
 import time
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / 'Linux'))
 from main import App, Window, GLib
+from actions import LaunchRequest
 from git_backend import Repository
 
 with tempfile.TemporaryDirectory(prefix='gitnebula-ui-') as directory:
@@ -16,7 +17,7 @@ with tempfile.TemporaryDirectory(prefix='gitnebula-ui-') as directory:
     repo = Repository(directory); repo.commit(['orbit.txt'], 'initial')
     file.write_text('second\n')
     app = App(); app.register(None)
-    window = Window(app); window.present()
+    window = Window(app, LaunchRequest('commit', (directory,))); window.present()
     def wait():
         deadline = time.monotonic() + 10
         context = GLib.MainContext.default()
@@ -24,7 +25,7 @@ with tempfile.TemporaryDirectory(prefix='gitnebula-ui-') as directory:
             while context.pending(): context.iteration(False)
             time.sleep(.01)
         assert not window.busy, 'GUI operation timed out'
-        assert window.status.get_text() == '準備完了', window.status.get_text()
+        assert not window.status.has_css_class('error'), window.status.get_text()
     window.repo = repo
     window.task(window.snapshot, window.render); wait()
     row = window.files.get_first_child().get_child()
@@ -63,5 +64,26 @@ with tempfile.TemporaryDirectory(prefix='gitnebula-ui-') as directory:
     window.finish_merge(); wait()
     assert not repo.merge_in_progress()
     assert git('log', '-1', '--format=%s').strip() == 'GUI merge'
+    window.set_action('log')
+    assert window.history_scroll.get_visible() and not window.commit_box.get_visible()
+    window.set_action('pull')
+    assert window.remote_bar.get_visible() and not window.file_panel.get_visible()
+    window.close()
+    file.write_text('scoped commit\n')
+    unrelated = root / 'unrelated.txt'; unrelated.write_text('keep outside commit\n')
+    window = Window(app, LaunchRequest('commit', (str(file),))); window.present()
+    window.open_repository(str(file)); wait()
+    assert window.selected == {'orbit.txt'}
+    assert window.commit_box.get_visible() and not window.branch_bar.get_visible()
+    assert not window.history_scroll.get_visible()
+    window.set_action('workspace')
+    assert len(window.changes) == 2
+    window.set_action('commit')
+    assert window.selected == {'orbit.txt'} and len(window.changes) == 1
+    window.message.set_text('right-click commit'); window.commit_button.emit('clicked'); wait()
+    assert [c.path for c in repo.changes()] == ['unrelated.txt']
+    assert git('log', '-1', '--format=%s').strip() == 'right-click commit'
+    window.set_action('clone')
+    assert window.clone_box.get_visible() and not window.commit_box.get_visible()
     window.close(); app.quit()
     print('PASS: GTK window, selection, diff, commit, preview, history, branches, conflict refresh and merge completion')

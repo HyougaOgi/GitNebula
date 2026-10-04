@@ -22,7 +22,7 @@ cp FinderExtension/Info.plist "$extension/Contents/"
 xcrun swiftc -parse-as-library -emit-executable -module-name GitNebulaFinder \
   -target "$(uname -m)-apple-macosx13.0" -framework Cocoa -framework FinderSync \
   -Xlinker -e -Xlinker _NSExtensionMain \
-  FinderExtension/FinderSync.swift -o "$extension/Contents/MacOS/GitNebulaFinder"
+  FinderExtension/FinderSync.swift Sources/GitNebula/LaunchRequest.swift -o "$extension/Contents/MacOS/GitNebulaFinder"
 if [[ "$release_mode" == --signed ]]; then
   codesign --force --options runtime --timestamp --sign "$MACOS_SIGNING_IDENTITY" --entitlements FinderExtension/entitlements.plist "$extension"
   codesign --force --options runtime --timestamp --sign "$MACOS_SIGNING_IDENTITY" "$bundle"

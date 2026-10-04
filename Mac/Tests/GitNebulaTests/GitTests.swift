@@ -59,7 +59,15 @@ final class GitTests: XCTestCase {
         _ = try clone.run(["config", "user.name", "Test"]); _ = try clone.run(["config", "user.email", "test@example.invalid"])
         try "remote update\n".write(to: URL(fileURLWithPath: clone.path).appendingPathComponent("orbit.txt"), atomically: true, encoding: .utf8)
         try clone.commit(["orbit.txt"], "remote update"); try clone.push("origin")
-        try repo.fetch("origin"); try repo.pull("origin")
-        XCTAssertEqual(try repo.readFile("orbit.txt"), "remote update\n")
+        try repo.renameBranch(branch, "local-work")
+        _ = try repo.run(["remote", "rename", "origin", "team"])
+        _ = try repo.run(["remote", "add", "origin", remote.path])
+        XCTAssertEqual(try repo.preferredRemote(), "team")
+        XCTAssertEqual(try repo.remoteBranch("team"), "refs/heads/" + branch)
+        try repo.fetch("team"); try repo.pull("team")
+        try write("orbit.txt", "local reply\n"); try repo.commit(["orbit.txt"], "reply"); try repo.push("team")
+        try clone.pull("origin")
+        XCTAssertEqual(try clone.readFile("orbit.txt"), "local reply\n")
+        XCTAssertEqual(try repo.readFile("orbit.txt"), "local reply\n")
     }
 }

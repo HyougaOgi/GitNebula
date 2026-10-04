@@ -14,13 +14,17 @@ The package is written to `dist/mac/GitNebula-unsigned.zip`. Extract and move `G
 
 ## Finder integration
 
-The packaged app contains `GitNebulaFinder.appex`. After installing and opening the app, enable **GitNebula Finder** in System Settings → Login Items & Extensions → Finder Extensions (the section name varies by macOS version). Select a repository folder in Finder and choose **Open in GitNebula**. The extension covers folders under `/Users` and `/Volumes`.
+The packaged app contains `GitNebulaFinder.appex`. After installing and opening the app, enable **GitNebula Finder** in System Settings → Login Items & Extensions → Finder Extensions (the section name varies by macOS version). Right-click a repository folder, a file, or the folder background, then choose **GitNebula → 変更をコミット / 差分を確認 / 履歴を表示 / Pull / Push / Fetch / ブランチを切り替え / Clone**. Each item opens its own focused dialog. Files and folder descendants are preselected for Commit; several selected files must belong to the same repository. The extension covers folders under `/Users` and `/Volumes`.
 
-Finder opens the app through `gitnebula://open?path=…`. For command-line use:
+Finder opens the requested operation through `gitnebula://commit?path=…` (and the corresponding action name). Paths are URL-encoded; multiple selections use repeated `path` parameters. A new Finder action preserves any existing dialog and its draft. For command-line use:
 
 ```sh
-open -a GitNebula --args --open /path/to/repository
+open -na GitNebula --args --action commit --path /path/to/repository
+open -na GitNebula --args --action diff --path "/path/to/repository/file.txt"
+open -na GitNebula --args --action clone --path /path/to/parent
 ```
+
+After upgrading, replace the application bundle and toggle the Finder extension off and on to reload the menu. The extension covers `/Users` and `/Volumes`.
 
 Disable the extension in System Settings before removing the application. `swift run` runs the development executable and does not install the Finder extension.
 

@@ -8,6 +8,15 @@ try
     var root = Path.Combine(temporary, "repo with spaces"); Directory.CreateDirectory(root);
     var repo = new GitRepository(root);
     await repo.Run("init", "-q"); await repo.Run("config", "user.name", "Test"); await repo.Run("config", "user.email", "test@example.invalid");
+    var request = LaunchRequest.Parse(["--action", "commit", "--path", Path.Combine(root, "星 雲.txt"), "--path", Path.Combine(root, "src")]);
+    Check(request.Action == "commit" && request.Includes("星 雲.txt", root), "file selection");
+    Check(request.Includes(Path.Combine("src", "nested", "file"), root), "directory scope");
+    Check(!request.Includes(Path.Combine("src-other", "file"), root), "directory boundary");
+    Check(!request.Includes("unrelated", root), "exclude unrelated changes");
+    Check(LaunchRequest.Parse(["--open", root]).Action == "open", "legacy launch");
+    bool invalidAction = false;
+    try { LaunchRequest.Parse(["--action", "reset"]); } catch (ArgumentException) { invalidAction = true; }
+    Check(invalidAction, "reject unknown action");
     await repo.Open(); Check((await repo.Changes()).Count == 0, "empty repository");
     await File.WriteAllTextAsync(Path.Combine(root, "old.txt"), "base\n");
     Check((await repo.Diff("old.txt")) == "base\n", "untracked preview");
@@ -40,8 +49,15 @@ try
     var clone = await GitRepository.Clone(remotePath, Path.Combine(temporary, "clone"));
     await clone.Run("config", "user.name", "Test"); await clone.Run("config", "user.email", "test@example.invalid");
     await File.WriteAllTextAsync(Path.Combine(clone.Path, "new.txt"), "remote update\n"); await clone.Commit(["new.txt"], "remote update"); await clone.Push("origin");
-    await repo.Fetch("origin"); await repo.Pull("origin");
+    await repo.RenameBranch(main, "local-work"); await repo.Run("remote", "rename", "origin", "team");
+    await repo.Run("remote", "add", "origin", remotePath);
+    Check(await repo.PreferredRemote() == "team", "prefer configured remote");
+    Check(await repo.RemoteBranch("team") == "refs/heads/" + main, "use upstream branch");
+    await repo.Fetch("team"); await repo.Pull("team");
     Check(await File.ReadAllTextAsync(Path.Combine(root, "new.txt")) == "remote update\n", "clone/fetch/push/pull");
+    await File.WriteAllTextAsync(Path.Combine(root, "new.txt"), "local reply\n"); await repo.Commit(["new.txt"], "reply"); await repo.Push("team");
+    await clone.Pull("origin");
+    Check(await File.ReadAllTextAsync(Path.Combine(clone.Path, "new.txt")) == "local reply\n", "push upstream branch");
     Console.WriteLine("PASS: Windows Git backend — preview, selected commit, rename guard, deletion, branches, graph, conflicts, clone/fetch/push/pull");
 }
 finally

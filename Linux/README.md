@@ -7,8 +7,10 @@ Native GTK 4 application using the distribution's Python and PyGObject bindings.
 sudo apt-get install python3-gi gir1.2-gtk-4.0 git
 /usr/bin/python3 Linux/main.py
 
-# Open a repository directly
-/usr/bin/python3 Linux/main.py /path/to/repository
+# Open the commit dialog directly
+/usr/bin/python3 Linux/main.py --action commit --path /path/to/repository
+# Review one file
+/usr/bin/python3 Linux/main.py --action diff --path "/path/to/repository/file.txt"
 ```
 
 Requires Python 3.10+, Git 2.29+, and an X11 or Wayland desktop.
@@ -24,7 +26,9 @@ This copies the application into `~/.local/share/gitnebula`, creates `~/.local/b
 - A Nautilus Python extension. Install your distribution's `python3-nautilus` package and restart Nautilus.
 - A KDE/Dolphin service menu. Restart the file manager if the action does not appear immediately.
 
-Use **Open in GitNebula** on a local directory. Other file managers can launch `gitnebula /path/to/repository`. Integration does not alter repositories.
+Right-click a local file, folder, or folder background and choose **GitNebula → 変更をコミット / 差分を確認 / 履歴を表示 / Pull / Push / Fetch / ブランチを切り替え / Clone**. Commit and Diff use the selected files or folder descendants. Multiple selections must belong to one repository. Clone starts with the clicked location as its destination parent. Each invocation has a separate window, preserving existing drafts.
+
+For other file managers, configure a custom action such as `gitnebula --action commit --path /path/to/repository`. The old `gitnebula /path/to/repository` form opens an operation chooser. Re-run the installer after upgrading and restart the file manager to reload the menu. Installing menus does not run Git operations.
 
 ```sh
 # Remove only GitNebula's installed files and menu entries

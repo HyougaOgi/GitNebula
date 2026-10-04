@@ -4,6 +4,7 @@ import argparse
 import pathlib
 import shlex
 import shutil
+from actions import ACTIONS
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--prefix', type=pathlib.Path, default=pathlib.Path.home() / '.local')
@@ -16,37 +17,28 @@ launcher = prefix / 'bin/gitnebula'
 desktop = prefix / 'share/applications/dev.gitnebula.desktop'
 nautilus = prefix / 'share/nautilus-python/extensions/gitnebula.py'
 kde = prefix / 'share/kio/servicemenus/gitnebula.desktop'
-owned = [launcher, desktop, nautilus, kde, application / 'main.py', application / 'git_backend.py']
+owned = [launcher, desktop, nautilus, kde, application / 'main.py', application / 'git_backend.py', application / 'actions.py']
 if args.uninstall:
     for file in owned:
         if file.exists() or file.is_symlink(): file.unlink()
     if application.is_dir() and not any(application.iterdir()): application.rmdir()
     print('Removed GitNebula user integration.'); raise SystemExit(0)
 for file in owned: file.parent.mkdir(parents=True, exist_ok=True)
-for name in ['main.py', 'git_backend.py']: shutil.copy2(source / name, application / name)
+for name in ['main.py', 'git_backend.py', 'actions.py']: shutil.copy2(source / name, application / name)
 launcher.write_text('#!/bin/sh\nexec /usr/bin/python3 ' + shlex.quote(str(application / 'main.py')) + ' "$@"\n')
 launcher.chmod(0o755)
 def desktop_quote(value):
     return '"' + str(value).replace('\\', '\\\\').replace('"', '\\"').replace('`', '\\`').replace('$', '\\$').replace('%', '%%') + '"'
 executable = desktop_quote(launcher)
 desktop.write_text('[Desktop Entry]\nType=Application\nName=GitNebula\nComment=Native Git client\nCategories=Development;RevisionControl;\nTerminal=false\nExec=' + executable + ' %f\nMimeType=inode/directory;\n')
-kde.write_text('[Desktop Entry]\nType=Service\nMimeType=inode/directory;\nX-KDE-ServiceTypes=KonqPopupMenu/Plugin\nActions=OpenGitNebula;\n\n[Desktop Action OpenGitNebula]\nName=Open in GitNebula\nExec=' + executable + ' %f\n')
+menu_actions = [(name, title) for name, (title, _) in ACTIONS.items() if name != 'open']
+service = '[Desktop Entry]\nType=Service\nMimeType=all/allfiles;inode/directory;\nX-KDE-ServiceTypes=KonqPopupMenu/Plugin\nX-KDE-Submenu=GitNebula\nX-KDE-Protocols=file\nActions=' + ';'.join(name for name, _ in menu_actions) + ';\n'
+for name, title in menu_actions:
+    service += '\n[Desktop Action ' + name + ']\nName=' + title + '…\nExec=' + executable + ' --action ' + name + ' -- %F\n'
+kde.write_text(service)
 kde.chmod(0o755)
-nautilus.write_text('''from gi.repository import GObject, Nautilus
-import subprocess
-
-class GitNebulaMenu(GObject.GObject, Nautilus.MenuProvider):
-    def item(self, folder):
-        if folder.get_uri_scheme() != 'file' or not folder.is_directory(): return []
-        from gi.repository import Gio
-        path = Gio.File.new_for_uri(folder.get_uri()).get_path()
-        item = Nautilus.MenuItem(name='GitNebula::open', label='Open in GitNebula', tip='Open repository')
-        item.connect('activate', lambda *_: subprocess.Popen([LAUNCHER, path], start_new_session=True))
-        return [item]
-    def get_file_items(self, *args):
-        files = args[-1]
-        return self.item(files[0]) if len(files) == 1 else []
-    def get_background_items(self, *args): return self.item(args[-1])
-'''.replace('LAUNCHER', repr(str(launcher))))
+provider = (source / 'nautilus_menu.py').read_text()
+provider = provider.replace("'__GITNEBULA_LAUNCHER__'", repr(str(launcher))).replace('__GITNEBULA_ACTIONS__', repr(menu_actions))
+nautilus.write_text(provider)
 print('Installed:', launcher)
 print('Nautilus requires python3-nautilus; restart the file manager to load its menu. KDE uses a service menu.')

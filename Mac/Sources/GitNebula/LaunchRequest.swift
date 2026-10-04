@@ -1,0 +1,103 @@
+import Foundation
+
+enum GitAction: String, CaseIterable, Sendable {
+    case open, commit, diff, log, pull, push, fetch, switchBranch = "switch", clone, workspace
+
+    var title: String {
+        switch self {
+        case .open: return "Git 操作を選択"
+        case .commit: return "変更をコミット"
+        case .diff: return "差分を確認"
+        case .log: return "履歴を表示"
+        case .pull: return "変更を受信（Pull）"
+        case .push: return "変更を送信（Push）"
+        case .fetch: return "リモートを更新（Fetch）"
+        case .switchBranch: return "ブランチを切り替え"
+        case .clone: return "リポジトリを複製（Clone）"
+        case .workspace: return "詳細操作"
+        }
+    }
+    var hint: String {
+        switch self {
+        case .open: return "Finder の右クリックから、必要な操作を直接開けます。"
+        case .commit: return "ファイルを確認して、メッセージを入力するだけ。"
+        case .diff: return "ファイルを選ぶと変更内容が表示されます。"
+        case .log: return "コミット・ブランチ・タグの履歴を確認できます。"
+        case .pull: return "リモートの変更を現在のブランチに取り込みます（fast-forward のみ）。"
+        case .push: return "現在のブランチのコミットをリモートに送信します。"
+        case .fetch: return "リモートの最新情報を取得します。作業ファイルは変更しません。"
+        case .switchBranch: return "切り替え先を選んで実行します。未コミットの変更がある場合は停止します。"
+        case .clone: return "取得元と、新しく作るフォルダを指定してください。"
+        case .workspace: return "ブランチ管理とマージの操作。"
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .commit: return "checkmark.circle"
+        case .diff: return "doc.text.magnifyingglass"
+        case .log: return "clock.arrow.circlepath"
+        case .pull: return "arrow.down.circle"
+        case .push: return "arrow.up.circle"
+        case .fetch: return "arrow.clockwise"
+        case .switchBranch: return "arrow.triangle.branch"
+        case .clone: return "square.on.square"
+        default: return "sparkles"
+        }
+    }
+}
+
+struct LaunchRequest: Sendable {
+    let action: GitAction
+    let paths: [String]
+
+    static func parse(_ arguments: [String]) throws -> LaunchRequest {
+        var action = GitAction.open, paths: [String] = [], index = 0
+        while index < arguments.count {
+            let value = arguments[index]
+            if value == "--action" {
+                index += 1
+                guard index < arguments.count, let parsed = GitAction(rawValue: arguments[index]) else { throw invalid() }
+                action = parsed
+            } else if value == "--path" || value == "--open" {
+                index += 1
+                guard index < arguments.count else { throw invalid() }
+                paths.append(arguments[index])
+            } else if value == "--" {
+                paths.append(contentsOf: arguments.dropFirst(index + 1)); break
+            } else { throw invalid() }
+            index += 1
+        }
+        return LaunchRequest(action: action, paths: paths)
+    }
+    static func parse(_ url: URL) throws -> LaunchRequest {
+        guard url.scheme == "gitnebula", let host = url.host, let action = GitAction(rawValue: host) else { throw invalid() }
+        let paths = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.filter { $0.name == "path" }.compactMap(\.value) ?? []
+        guard !paths.isEmpty else { throw invalid() }
+        return LaunchRequest(action: action, paths: paths)
+    }
+    static func invalid() -> NSError {
+        NSError(domain: "GitNebula", code: 1, userInfo: [NSLocalizedDescriptionKey: "起動引数が不正です。--action commit --path /path/to/repo の形式で指定してください。"])
+    }
+    func includes(_ file: String, root: String) -> Bool {
+        if paths.isEmpty { return true }
+        let target = Self.normalized(URL(fileURLWithPath: root).appendingPathComponent(file).path)
+        return paths.contains {
+            let path = Self.normalized($0)
+            return target == path || target.hasPrefix(path.hasSuffix("/") ? path : path + "/")
+        }
+    }
+    private static func normalized(_ path: String) -> String {
+        let url = URL(fileURLWithPath: path).standardizedFileURL
+        return url.deletingLastPathComponent().resolvingSymlinksInPath().appendingPathComponent(url.lastPathComponent).path
+    }
+    static func directory(for path: String) -> String {
+        if (try? FileManager.default.attributesOfItem(atPath: path)[.type] as? FileAttributeType) == .typeSymbolicLink {
+            return URL(fileURLWithPath: path).deletingLastPathComponent().path
+        }
+        var directory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: path, isDirectory: &directory), !directory.boolValue {
+            return URL(fileURLWithPath: path).deletingLastPathComponent().path
+        }
+        return path
+    }
+}

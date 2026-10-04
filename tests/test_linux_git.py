@@ -181,6 +181,27 @@ class GitTests(unittest.TestCase):
             with self.assertRaises(RuntimeError): self.repo.pull('origin')
             self.assertEqual(self.git('rev-parse', 'HEAD'), head)
 
+    def test_quick_sync_uses_tracking_branch_and_remote(self):
+        base = self.initial()
+        with tempfile.TemporaryDirectory() as directory:
+            remote = pathlib.Path(directory) / 'remote.git'
+            subprocess.run(['git', 'init', '--bare', '-q', str(remote)], check=True)
+            subprocess.run(['git', '-C', str(remote), 'symbolic-ref', 'HEAD', 'refs/heads/' + base], check=True)
+            self.git('remote', 'add', 'team', str(remote)); self.repo.push('team')
+            self.repo.rename_branch(base, 'local-work')
+            self.git('remote', 'add', 'origin', str(remote))
+            self.assertEqual(self.repo.preferred_remote(), 'team')
+            clone = Repository.clone(str(remote), str(pathlib.Path(directory) / 'clone'))
+            clone.run('config', 'user.name', 'Test'); clone.run('config', 'user.email', 'test@example.invalid')
+            (pathlib.Path(clone.path) / 'orbit.txt').write_text('upstream\n')
+            clone.commit(['orbit.txt'], 'upstream'); clone.push('origin')
+            self.repo.pull('team')
+            self.assertEqual((self.root / 'orbit.txt').read_text(), 'upstream\n')
+            (self.root / 'orbit.txt').write_text('local reply\n'); self.repo.commit(['orbit.txt'], 'reply'); self.repo.push('team')
+            clone.pull('origin')
+            self.assertEqual((pathlib.Path(clone.path) / 'orbit.txt').read_text(), 'local reply\n')
+            self.assertNotIn('local-work', subprocess.check_output(['git', '-C', str(remote), 'branch']).decode())
+
     def make_conflict(self):
         base = self.initial()
         self.repo.create_branch('incoming')

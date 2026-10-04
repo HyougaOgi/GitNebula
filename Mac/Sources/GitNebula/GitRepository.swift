@@ -5,6 +5,14 @@ struct Change: Identifiable, Sendable {
     let code: String
     let path: String
     let original: String?
+    var label: String {
+        if ["DD", "AU", "UD", "UA", "DU", "AA", "UU"].contains(code) { return "競合" }
+        if code == "??" { return "新規" }
+        if code.contains("R") { return "名前変更" }
+        if code.contains("D") { return "削除" }
+        if code.contains("A") { return "追加" }
+        return "変更"
+    }
 }
 
 struct GitRepository: Sendable {
@@ -118,15 +126,27 @@ struct GitRepository: Sendable {
         guard try changes().isEmpty, try !mergeInProgress() else { throw failure("変更をコミットし、進行中のマージを完了してください") }
     }
     func fetch(_ name: String) throws { _ = try run(["fetch", "--prune", remote(name)]) }
-    func pull(_ name: String) throws {
-        try requireClean()
-        let branch = try run(["symbolic-ref", "--short", "HEAD"]).trimmingCharacters(in: .newlines)
-        _ = try run(["pull", "--ff-only", remote(name), validateBranch(branch)])
+    func preferredRemote() throws -> String {
+        let branch = (try? run(["symbolic-ref", "--short", "HEAD"]))?.trimmingCharacters(in: .newlines) ?? ""
+        let configured = (try? run(["config", "--get", "branch.\(branch).remote"]))?.trimmingCharacters(in: .newlines) ?? ""
+        let names = try remotes()
+        return names.contains(configured) ? configured : names.contains("origin") ? "origin" : names.first ?? ""
     }
-    func push(_ name: String) throws {
+    func remoteBranch(_ name: String) throws -> String {
         let branch = try run(["symbolic-ref", "--short", "HEAD"]).trimmingCharacters(in: .newlines)
         _ = try validateBranch(branch)
-        _ = try run(["push", "--set-upstream", remote(name), "HEAD:refs/heads/\(branch)"])
+        let configured = (try? run(["config", "--get", "branch.\(branch).remote"]))?.trimmingCharacters(in: .newlines)
+        if configured == name, let merge = (try? run(["config", "--get", "branch.\(branch).merge"]))?.trimmingCharacters(in: .newlines), merge.hasPrefix("refs/heads/") {
+            _ = try run(["check-ref-format", merge]); return merge
+        }
+        return "refs/heads/\(branch)"
+    }
+    func pull(_ name: String) throws {
+        try requireClean()
+        _ = try run(["pull", "--ff-only", remote(name), remoteBranch(name)])
+    }
+    func push(_ name: String) throws {
+        _ = try run(["push", "--set-upstream", remote(name), "HEAD:" + remoteBranch(name)])
     }
     func createBranch(_ name: String) throws { try requireClean(); _ = try run(["switch", "-c", validateBranch(name)]) }
     func switchBranch(_ name: String) throws {

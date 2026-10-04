@@ -1,8 +1,8 @@
 # GitNebula
 
-A space-inspired, open-source Git desktop client with a native application for **macOS, Linux, and Windows**.
+A space-inspired, open-source Git client for **macOS, Linux, and Windows**, built around file-manager context menus.
 
-GitNebula shares a visual language across platforms while using each operating system's own UI toolkit and process APIs.
+Right-click a file or folder, choose **GitNebula → Commit / Diff / Log / Pull / Push**, and go straight to that operation. Each platform uses its own native UI toolkit, with a shared nebula palette and focused dialogs.
 
 | Platform | Application | Requirements |
 | --- | --- | --- |
@@ -19,7 +19,9 @@ GitNebula shares a visual language across platforms while using each operating s
 - Fetch, fast-forward pull, and push with upstream tracking.
 - Create, switch, rename, merge, and safely delete local branches.
 - Edit text conflicts, mark externally resolved files, complete or abort a merge.
-- Open repositories from Finder, Nautilus, KDE/Dolphin, or Explorer context menus.
+- Launch operation-specific dialogs directly from Finder, Nautilus, KDE/Dolphin, or Explorer.
+- Carry the selected file/folder into the commit and diff dialogs, with changes preselected.
+- Keep drafts and running operations separate when opening another context-menu action.
 - Build platform-specific packages, with optional code signing and verification.
 
 GitNebula is in active development. Native build and integration-test commands are included for every platform. Release signing requires the maintainer's own signing identity; unsigned development packages are not notarized or trusted release artifacts.
@@ -50,11 +52,22 @@ See the platform guides for installation, file-manager integration, and packagin
 - [Linux](Linux/README.md)
 - [Windows](Windows/README.md)
 
-## Working with repositories
+## Everyday workflow
 
-Choose **Open repository** or **Clone**, select changed files, inspect their diffs, and enter a commit message. The remote selector controls Fetch, Pull, and Push; the branch selector controls local branch operations. UI labels currently use Japanese with familiar Git command names.
+Install the file-manager integration from your [platform guide](#getting-started), then:
 
-Pull accepts fast-forward updates only. Branch deletion uses Git's merged-branch check. Branch switching and merging require a clean working tree. Git hooks run normally.
+1. Right-click a repository folder or a changed file.
+2. Choose **GitNebula → 変更をコミット…**.
+3. Review the preselected changes, enter a message, and click **コミット**.
+4. Read the result and close the dialog.
+
+**差分を確認** and **履歴を表示** open their own views. **Pull / Push / Fetch** show the repository, current branch and remote, then run when you click the action button. **ブランチを切り替え** only asks for the target branch. **Clone** starts directly at its source/destination form and uses the clicked location as the parent folder.
+
+Commit and diff are scoped to the selected files or folder descendants. History and remote operations apply to the repository. Finder and Linux accept multiple selections within one repository; Explorer uses one selected file/folder per dialog. A folder selection includes its descendants. Advanced branch and merge tools are under **詳細操作**; conflict controls appear only when needed.
+
+Launching the application normally shows an operation chooser. **その他の操作** switches between dialogs. UI labels use Japanese descriptions alongside standard Git terms. See [the interaction specification](shared/DESIGN.md).
+
+Pull accepts fast-forward updates only. Pull and Push respect an existing upstream branch even when its name differs from the local branch; the configured remote is preselected. Branch deletion uses Git's merged-branch check. Branch switching and merging require a clean working tree. Git hooks run normally.
 
 When a merge conflicts, select a conflicted file and edit its resolution, or resolve it in another editor and mark it resolved. Completing a merge includes **all staged changes**. Aborting a merge discards the current resolution work after confirmation. Rebase and cherry-pick continuation are not supported.
 
@@ -79,6 +92,7 @@ swift test --package-path Mac
 # Windows native build and backend tests
 dotnet build Windows/GitNebula.csproj
 dotnet run --project tests/windows/GitNebula.BackendTests.csproj
+dotnet run --project tests/windows-ui/GitNebula.UiTests.csproj
 ```
 
 Tests create temporary repositories and local bare remotes. They do not push to a hosted repository. [CI](.github/workflows/ci.yml) runs on all three operating systems.

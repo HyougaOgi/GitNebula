@@ -12,6 +12,15 @@ class Change:
     path: str
     original: str | None = None
 
+    @property
+    def label(self):
+        if self.code in ('DD', 'AU', 'UD', 'UA', 'DU', 'AA', 'UU'): return '競合'
+        if self.code == '??': return '新規'
+        if 'R' in self.code: return '名前変更'
+        if 'D' in self.code: return '削除'
+        if 'A' in self.code: return '追加'
+        return '変更'
+
 
 class Repository:
     def __init__(self, path):
@@ -133,15 +142,31 @@ class Repository:
     def fetch(self, remote):
         return self.run('fetch', '--prune', self.remote(remote))
 
-    def pull(self, remote):
-        self.require_clean()
-        branch = self.run('symbolic-ref', '--short', 'HEAD').strip()
-        return self.run('pull', '--ff-only', self.remote(remote), self.validate_branch(branch))
+    def preferred_remote(self):
+        branch = self.run('symbolic-ref', '--short', 'HEAD').strip() if self.branch() != 'detached HEAD' else ''
+        try: configured = self.run('config', '--get', f'branch.{branch}.remote').strip()
+        except RuntimeError: configured = ''
+        remotes = self.remotes()
+        return configured if configured in remotes else 'origin' if 'origin' in remotes else next(iter(remotes), '')
 
-    def push(self, remote):
+    def remote_branch(self, remote):
         branch = self.run('symbolic-ref', '--short', 'HEAD').strip()
         self.validate_branch(branch)
-        return self.run('push', '--set-upstream', self.remote(remote), f'HEAD:refs/heads/{branch}')
+        try:
+            configured = self.run('config', '--get', f'branch.{branch}.remote').strip()
+            merge = self.run('config', '--get', f'branch.{branch}.merge').strip()
+            if configured == remote and merge.startswith('refs/heads/'):
+                self.run('check-ref-format', merge)
+                return merge
+        except RuntimeError: pass
+        return f'refs/heads/{branch}'
+
+    def pull(self, remote):
+        self.require_clean()
+        return self.run('pull', '--ff-only', self.remote(remote), self.remote_branch(remote))
+
+    def push(self, remote):
+        return self.run('push', '--set-upstream', self.remote(remote), f'HEAD:{self.remote_branch(remote)}')
 
     def create_branch(self, name):
         self.require_clean()

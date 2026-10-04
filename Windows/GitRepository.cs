@@ -1,7 +1,11 @@
 using System.Diagnostics;
 using System.IO;
 namespace GitNebula;
-public record Change(string Code, string Path, string? Original);
+public record Change(string Code, string Path, string? Original)
+{
+    public string Label => Code is "DD" or "AU" or "UD" or "UA" or "DU" or "AA" or "UU" ? "競合" :
+        Code == "??" ? "新規" : Code.Contains('R') ? "名前変更" : Code.Contains('D') ? "削除" : Code.Contains('A') ? "追加" : "変更";
+}
 public sealed class GitRepository(string path)
 {
     public string Path { get; private set; } = path;
@@ -99,16 +103,34 @@ public sealed class GitRepository(string path)
         if ((await Changes()).Count > 0 || await MergeInProgress()) throw new InvalidOperationException("変更をコミットし、進行中のマージを完了してください。");
     }
     public async Task Fetch(string remote) => await Run("fetch", "--prune", await Remote(remote));
-    public async Task Pull(string remote)
+    public async Task<string> PreferredRemote()
     {
-        await RequireClean(); var branch = await ValidateBranch((await Run("symbolic-ref", "--short", "HEAD")).Trim());
-        await Run("pull", "--ff-only", await Remote(remote), branch);
+        var branch = await Branch(); string configured;
+        try { configured = (await Run("config", "--get", $"branch.{branch}.remote")).Trim(); }
+        catch (InvalidOperationException) { configured = ""; }
+        var names = await Remotes();
+        return names.Contains(configured) ? configured : names.Contains("origin") ? "origin" : names.FirstOrDefault() ?? "";
     }
-    public async Task Push(string remote)
+    public async Task<string> RemoteBranch(string remote)
     {
         var branch = await ValidateBranch((await Run("symbolic-ref", "--short", "HEAD")).Trim());
-        await Run("push", "--set-upstream", await Remote(remote), $"HEAD:refs/heads/{branch}");
+        try
+        {
+            var configured = (await Run("config", "--get", $"branch.{branch}.remote")).Trim();
+            var merge = (await Run("config", "--get", $"branch.{branch}.merge")).Trim();
+            if (configured == remote && merge.StartsWith("refs/heads/", StringComparison.Ordinal))
+            {
+                await Run("check-ref-format", merge); return merge;
+            }
+        }
+        catch (InvalidOperationException) { }
+        return $"refs/heads/{branch}";
     }
+    public async Task Pull(string remote)
+    {
+        await RequireClean(); await Run("pull", "--ff-only", await Remote(remote), await RemoteBranch(remote));
+    }
+    public async Task Push(string remote) => await Run("push", "--set-upstream", await Remote(remote), "HEAD:" + await RemoteBranch(remote));
     public async Task CreateBranch(string name) { await RequireClean(); await Run("switch", "-c", await ValidateBranch(name)); }
     public async Task SwitchBranch(string name)
     {
