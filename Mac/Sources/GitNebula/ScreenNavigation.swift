@@ -9,9 +9,10 @@ struct FileComparisonRequest: Sendable {
 }
 
 enum UtilityPage: Equatable {
-    case files, branches, conflicts, identity, tool(RepositoryTool)
+    case files, branches, conflicts, identity, settings, tool(RepositoryTool)
     var title: String {
         switch self {
+        case .settings: return "アプリの設定"
         case .files: return "作業ファイルの管理"
         case .branches: return "ブランチの管理"
         case .conflicts: return "競合の解決"
@@ -21,6 +22,7 @@ enum UtilityPage: Equatable {
     }
     var hint: String {
         switch self {
+        case .settings: return "常駐と Git の実行ファイルを設定します。"
         case .files: return "ステージ・ステージ解除・無視・変更の破棄を行います。"
         case .branches: return "ブランチの作成・名前変更・削除・マージを行います。"
         case .conflicts: return "競合ファイルを解決し、進行中の操作を再開または中止します。"
@@ -33,6 +35,9 @@ enum UtilityPage: Equatable {
 /// Weak callbacks avoid a navigation → retained host → environment → navigation cycle.
 struct ScreenActions {
     var canGoBack = false
+    var home: () -> Void = {}
+    var resume: () -> Void = {}
+    var canResume = false
     var back: () -> Void = {}
     var close: () -> Void = {}
     var openAction: (GitAction) -> Void = { _ in }
@@ -60,21 +65,25 @@ final class ScreenNavigation: ObservableObject {
     }
     @Published private(set) var frames: [Frame] = []
     var current: Frame? { frames.last }
-    var busy: Bool { frames.contains { $0.model?.busy == true } }
+    var busy: Bool { (frames + suspendedFrames).contains { $0.model?.busy == true } }
     func canReuseLauncher(_ model: Workspace) -> Bool {
         frames.count <= 1 && !busy && !model.busy && model.action == .open && model.repository == nil
     }
+    private var suspendedFrames: [Frame] = []
     private var launchID: UUID?
     private var closeWindow: (() -> Void)?
 
     func installRoot(_ model: Workspace, close: (() -> Void)?) {
         guard launchID != model.launchID || frames.isEmpty else { return }
         frames.forEach { $0.model?.isScreenActive = false }
-        frames = []; launchID = model.launchID; closeWindow = close
+        frames = []; suspendedFrames = []; launchID = model.launchID; closeWindow = close
         append(OperationScreen(model: model, closeWindow: close), model: model, title: model.action.title)
     }
     private func actions() -> ScreenActions {
         ScreenActions(canGoBack: !frames.isEmpty,
+                      home: { [weak self] in self?.home() },
+                      resume: { [weak self] in self?.resume() },
+                      canResume: !suspendedFrames.isEmpty,
                       back: { [weak self] in self?.back() },
                       close: { [weak self] in
                           guard let self, !self.busy else { return }
@@ -109,11 +118,50 @@ final class ScreenNavigation: ObservableObject {
         model.launch(source.request(for: action))
         return model
     }
+    func request(for action: GitAction) -> LaunchRequest {
+        frames.reversed().compactMap(\.model).first?.request(for: action) ?? LaunchRequest(action: action, paths: [])
+    }
+    func openRequest(_ request: LaunchRequest) {
+        guard !busy else { return }
+        let model = Workspace(); model.launch(request)
+        append(OperationScreen(model: model, closeWindow: closeWindow), model: model, title: request.action.title)
+    }
+    func home() {
+        guard !busy, let root = frames.first, frames.count > 1 else { return }
+        // Retain drafts and native table state while showing the home screen.
+        suspendedFrames = suspendedFrames.isEmpty ? frames : suspendedFrames + frames.dropFirst()
+        current?.model?.isScreenActive = false
+        if let source = frames.reversed().compactMap(\.model).first(where: { $0.repository != nil }), let model = root.model {
+            if let repo = source.repository { model.adoptRepository(repo) }
+        }
+        frames = [root]; root.model?.isScreenActive = true
+        updateHomeCallbacks()
+    }
+    func resume() {
+        guard !suspendedFrames.isEmpty, !busy else { return }
+        current?.model?.isScreenActive = false
+        frames = suspendedFrames; suspendedFrames = []
+        current?.model?.isScreenActive = true; current?.model?.refreshIfNeeded()
+        updateHomeCallbacks()
+    }
+    private func updateHomeCallbacks() {
+        guard let root = frames.first, let model = root.model, model.action == .open else { return }
+        var callbacks = actions(); callbacks.canGoBack = false
+        root.host.rootView = AnyView(OperationScreen(model: model).environment(\.screenActions, callbacks))
+    }
     func openAction(_ action: GitAction) {
         guard let model = childModel(action: action) else { return }
         append(OperationScreen(model: model, closeWindow: closeWindow), model: model, title: action.title)
     }
     func openUtility(_ page: UtilityPage) {
+        if case .tool(let tool) = page {
+            switch tool {
+            case .cherryPick: openAction(.cherryPick); return
+            case .revert: openAction(.revert); return
+            case .rebase: openAction(.rebase); return
+            default: break
+            }
+        }
         guard let model = childModel(action: .workspace) else { return }
         append(OperationScreen(model: model, page: page, closeWindow: closeWindow), model: model, title: page.title)
     }
@@ -132,13 +180,21 @@ final class ScreenNavigation: ObservableObject {
 
 final class RetainedScreenHost: NSView {
     weak var active: NSView?
+    private var screenTitle = ""
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if !screenTitle.isEmpty { window?.title = screenTitle }
+    }
     func display(_ frame: ScreenNavigation.Frame) {
+        screenTitle = frame.title + " — GitNebula"
+        window?.title = screenTitle
         guard active !== frame.host else { return }
-        active?.removeFromSuperview()
+        // Remove every stale child; only one route may be attached to the window.
+        subviews.filter { $0 !== frame.host }.forEach { $0.removeFromSuperview() }
         let view = frame.host
         view.frame = bounds; view.autoresizingMask = [.width, .height]
-        addSubview(view); active = view
-        window?.title = frame.title + " — GitNebula"
+        if view.superview !== self { addSubview(view) }; active = view
+        window?.title = screenTitle
         // The actual table and clip view are retained, including their scroll offsets.
         if let responder = frame.firstResponder { window?.makeFirstResponder(responder) }
         else { window?.makeFirstResponder(view) }

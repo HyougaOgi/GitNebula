@@ -49,7 +49,11 @@ extension GitRepository {
     }
     func saveStash(_ message: String, includeUntracked: Bool) throws {
         try requireIdle()
-        guard try !changes().isEmpty else { throw failure("退避する変更がありません。") }
+        let changes = try changes()
+        guard changes.contains(where: { includeUntracked || $0.code != "??" }) else {
+            throw failure("退避する変更がありません。未追跡ファイルを退避する場合はチェックを入れてください。")
+        }
+        guard try headRevision() != nil else { throw failure("Stash を使う前に最初のコミットを作成してください。") }
         var args = ["stash", "push"]
         if includeUntracked { args.append("--include-untracked") }
         args += ["-m", message.isEmpty ? "GitNebula" : message]
@@ -64,7 +68,7 @@ extension GitRepository {
         _ = try run(["stash", pop ? "pop" : "apply", "--index", stashReference(id)])
     }
     func dropStash(_ id: String) throws { try requireIdle(); _ = try run(["stash", "drop", stashReference(id)]) }
-    func showStash(_ id: String) throws -> String { try run(["stash", "show", "--include-untracked", "--patch", stashReference(id)]) }
+    func showStash(_ id: String) throws -> String { try run(["stash", "show", "--include-untracked", "--no-ext-diff", "--no-textconv", "--patch", stashReference(id)]) }
     func tags() throws -> [String] { try run(["tag", "--list", "--sort=-creatordate"]).split(separator: "\n").map(String.init) }
     func validateTag(_ name: String) throws {
         guard !name.isEmpty, !name.hasPrefix("-") else { throw failure("タグ名を入力してください。") }
@@ -90,8 +94,8 @@ extension GitRepository {
     }
     func removeRemote(_ name: String) throws { _ = try run(["remote", "remove", remote(name)]) }
     func identity() throws -> String {
-        let name = (try? run(["config", "--get", "user.name"]))?.trimmingCharacters(in: .newlines) ?? "未設定"
-        let email = (try? run(["config", "--get", "user.email"]))?.trimmingCharacters(in: .newlines) ?? "未設定"
+        let name = try configuration("user.name") ?? "未設定"
+        let email = try configuration("user.email") ?? "未設定"
         return "\(name) <\(email)>"
     }
     func setIdentity(name: String, email: String) throws {
@@ -112,9 +116,10 @@ extension GitRepository {
     }
     func unstage(_ files: [String]) throws {
         try requireIdle()
-        let changes = try selectedChanges(files)
-        let args = (try? revision("HEAD")) == nil ? ["rm", "--cached"] : ["restore", "--staged"]
-        _ = try run(["--literal-pathspecs"] + args + ["--"] + files + changes.compactMap(\.original))
+        let changes = try selectedChanges(files).filter { $0.code.first != " " && $0.code.first != "?" }
+        guard !changes.isEmpty else { throw failure("選択したファイルにステージ済みの変更はありません。") }
+        let args = try headRevision() == nil ? ["rm", "--cached", "-f"] : ["restore", "--staged"]
+        _ = try run(["--literal-pathspecs"] + args + ["--"] + changes.map(\.path) + changes.compactMap(\.original))
     }
     func discard(_ files: [String]) throws {
         try requireIdle()

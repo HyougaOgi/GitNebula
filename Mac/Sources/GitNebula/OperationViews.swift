@@ -62,7 +62,7 @@ struct RemoteOperationView: View {
                 if let error { Text(error).foregroundStyle(.orange).textSelection(.enabled) }
                 HStack {
                     Spacer()
-                    Button(model.action.title, action: model.runAction).buttonStyle(.borderedProminent).controlSize(.large).disabled(model.succeeded)
+                    Button(model.action.title, action: model.runAction).buttonStyle(.borderedProminent).controlSize(.large)
                 }
             }
             Button("リモートを設定") { navigation.openAction(.remotes) }

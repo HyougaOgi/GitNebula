@@ -48,6 +48,69 @@ final class ToolTests: XCTestCase {
         XCTAssertEqual(try repo.stashes().count, 1)
         XCTAssertThrowsError(try repo.dropStash(first.id))
     }
+    func testStashPopSuccessAndConflictPreservesEntry() throws {
+        try write("orbit.txt", "stashed\n"); try repo.saveStash("pop success", includeUntracked: false)
+        let first = try XCTUnwrap(repo.stashes().first)
+        try repo.applyStash(first.id, pop: true)
+        XCTAssertTrue(try repo.stashes().isEmpty); XCTAssertEqual(try repo.readFile("orbit.txt"), "stashed\n")
+        try repo.commit(["orbit.txt"], "restored")
+        try write("orbit.txt", "stashed conflict\n"); try repo.saveStash("pop conflict", includeUntracked: true)
+        let conflict = try XCTUnwrap(repo.stashes().first)
+        try write("orbit.txt", "new base\n"); try repo.commit(["orbit.txt"], "new base")
+        XCTAssertThrowsError(try repo.applyStash(conflict.id, pop: true))
+        XCTAssertTrue(try repo.stashes().contains { $0.id == conflict.id })
+        XCTAssertEqual(try repo.conflicts(), ["orbit.txt"])
+        try repo.saveResolution("orbit.txt", "resolved\n"); try repo.commit(["orbit.txt"], "resolved stash")
+        try repo.dropStash(conflict.id)
+        try write("untracked.txt", "only untracked\n")
+        XCTAssertThrowsError(try repo.saveStash("no-op", includeUntracked: false))
+        XCTAssertTrue(try repo.stashes().isEmpty)
+    }
+    func testUnstageBeforeFirstCommitPreservesWorkingContent() throws {
+        let folder = root.appendingPathComponent("unborn-repository")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let empty = GitRepository(path: folder.path)
+        _ = try empty.run(["init", "--initial-branch=main"])
+        try "staged\n".write(to: folder.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+        try empty.stage(["file.txt"])
+        try "working\n".write(to: folder.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+        try "untracked\n".write(to: folder.appendingPathComponent("new.txt"), atomically: true, encoding: .utf8)
+        try empty.unstage(["file.txt", "new.txt"])
+        XCTAssertEqual(try empty.readFile("file.txt"), "working\n")
+        XCTAssertTrue(try empty.changes().allSatisfy { $0.code == "??" })
+        XCTAssertEqual(try empty.readFile("new.txt"), "untracked\n")
+    }
+    func testUnstageMixedSelectionPreservesUnstagedChanges() throws {
+        try write("orbit.txt", "staged\n"); try repo.stage(["orbit.txt"])
+        try write("orbit.txt", "working\n"); try write("new.txt", "untracked\n")
+        try repo.unstage(["orbit.txt", "new.txt"])
+        XCTAssertEqual(try repo.run(["diff", "--cached", "--name-only"]), "")
+        XCTAssertEqual(try repo.readFile("orbit.txt"), "working\n")
+        XCTAssertEqual(try repo.readFile("new.txt"), "untracked\n")
+        XCTAssertThrowsError(try repo.unstage(["orbit.txt", "new.txt"])) { error in
+            XCTAssertTrue(error.localizedDescription.contains("ステージ済みの変更はありません"))
+        }
+    }
+    func testPushExplainsUnbornAndDetachedBranchWithoutContactingRemote() throws {
+        let folder = root.appendingPathComponent("unborn")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let empty = GitRepository(path: folder.path)
+        _ = try empty.run(["init", "--initial-branch=main"])
+        try empty.setRemote("origin", url: folder.appendingPathComponent("missing.git").path)
+        XCTAssertThrowsError(try empty.push("origin")) { error in
+            XCTAssertTrue(error.localizedDescription.contains("最初のコミット"))
+        }
+        try repo.setRemote("origin", url: folder.appendingPathComponent("missing.git").path)
+        _ = try repo.run(["switch", "--detach", "HEAD"])
+        XCTAssertThrowsError(try repo.push("origin")) { error in
+            XCTAssertTrue(error.localizedDescription.contains("ブランチを選んでください"))
+        }
+    }
+    func testDiffDoesNotLaunchConfiguredExternalTool() throws {
+        try write("orbit.txt", "changed\n")
+        _ = try repo.run(["config", "diff.external", "gitnebula-nonexistent-diff-helper"])
+        XCTAssertTrue(try repo.diff("orbit.txt").contains("+changed"))
+    }
     func testTagsAndRevisionValidation() throws {
         try repo.createTag("v1.0", at: "HEAD", message: "release")
         try repo.createTag("lightweight", at: "HEAD", message: "")
@@ -104,6 +167,8 @@ final class ToolTests: XCTestCase {
         XCTAssertThrowsError(try repo.cherryPick(feature))
         XCTAssertEqual(try repo.sequence(), .cherryPick)
         XCTAssertThrowsError(try repo.createBranch("while-conflicting"))
+        XCTAssertThrowsError(try repo.renameBranch("main", "while-conflicting"))
+        XCTAssertThrowsError(try repo.deleteBranch("feature"))
         try repo.saveResolution("orbit.txt", "resolved\n")
         XCTAssertThrowsError(try repo.commit(["orbit.txt"], "wrong completion"))
         try repo.continueSequence()

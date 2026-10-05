@@ -67,13 +67,13 @@ Install the file-manager integration from your [platform guide](#getting-started
 
 **差分一覧** (macOS; **差分を確認** on other platforms) and **履歴を表示** open their own views. On macOS, lists contain no inline comparison: open a file to see its read-only comparison, then use **戻る** to return with selection, scroll and drafts preserved. **Pull / Push / Fetch** show the repository, current branch and remote, then run when you click the action button. **ブランチを切り替え** only asks for the target branch. **Clone** starts directly at its source/destination form and uses the clicked location as the parent folder.
 
-Commit and diff are scoped to the selected files or folder descendants. History and remote operations apply to the repository. Finder and Linux accept multiple selections within one repository; Explorer uses one selected file/folder per dialog. A folder selection includes its descendants. On macOS, **リポジトリの管理** opens dedicated working-file, branch, conflict and identity screens; other platforms retain **詳細操作**.
+Commit and diff are scoped to the selected files or folder descendants. History and remote operations apply to the repository. Finder and Linux accept multiple selections within one repository; Explorer uses one selected file/folder per dialog. A folder selection includes its descendants. On macOS, **リポジトリの管理** opens dedicated working-file, branch, conflict and identity screens; Windows also opens dedicated management screens; Linux retains **詳細操作**.
 
-Launching the application normally shows an editable repository path and an operation chooser. Type/paste a path and press Enter, or use the folder picker. macOS navigates into dedicated screens with a Back button; **その他の機能** is a launcher for advanced tools. Other platforms retain **その他の操作**. UI labels use Japanese descriptions alongside standard Git terms. See [the interaction specification](shared/DESIGN.md).
+Launching the macOS or Windows application normally shows **GitNebula へようこそ**, recent repositories, an editable repository path, Clone and settings. Select Git functions from the menu-bar icon or **Git 操作** menu on macOS, and the tray menu or **機能を選ぶ…** on Windows. Closing hides the window by default, and Quit is explicit. Linux shows its operation chooser. Type/paste a path and press Enter, or use the folder picker. macOS navigates into dedicated screens with a Back button; **その他の機能** is a launcher for advanced tools. UI labels use Japanese descriptions alongside standard Git terms. See [the interaction specification](shared/DESIGN.md).
 
 Pull accepts fast-forward updates only. Pull and Push respect an existing upstream branch even when its name differs from the local branch; the configured remote is preselected. Branch deletion uses Git's merged-branch check. Branch switching and merging require a clean working tree. Git hooks run normally.
 
-When a merge conflicts, select a conflicted file and edit its resolution, or resolve it in another editor and mark it resolved. Completing a merge includes **all staged changes**. Aborting a merge discards the current resolution work after confirmation. macOS also supports continuing or aborting Rebase, Cherry-pick and Revert; Windows and Linux currently support merge completion only.
+When a merge conflicts, select a conflicted file and edit its resolution, or resolve it in another editor and mark it resolved. Completing a merge includes **all staged changes**. Aborting a merge discards the current resolution work after confirmation. macOS and Windows also support continuing or aborting Rebase, Cherry-pick and Revert; Linux supports merge completion only.
 
 If a renamed file's original path has been recreated, explicitly select that path too or move it aside before committing the rename. This prevents unselected replacement content from being included. A failed commit may leave selected files staged.
 
@@ -99,7 +99,7 @@ dotnet run --project tests/windows/GitNebula.BackendTests.csproj
 dotnet run --project tests/windows-ui/GitNebula.UiTests.csproj
 ```
 
-Tests create temporary repositories and local bare remotes. They do not push to a hosted repository. [CI](.github/workflows/ci.yml) runs on all three operating systems.
+Tests create temporary repositories and local bare remotes. They do not push to a hosted repository. [CI](.github/workflows/ci.yml) runs on macOS and Linux. The Windows job is temporarily disabled with its steps retained for easy restoration. See [investigation and validation](shared/VALIDATION.md).
 
 ## Project layout
 

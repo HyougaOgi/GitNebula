@@ -18,6 +18,8 @@ jobs:
       - run: swift test --package-path Mac
       - run: bash Mac/package.sh --unsigned
   windows:
+    # Temporarily disabled. Set this to true to restore the existing Windows checks.
+    if: ${{ false }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

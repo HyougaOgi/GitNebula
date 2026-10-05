@@ -337,6 +337,58 @@ final class BrowserTests: XCTestCase {
         XCTAssertEqual(Set(try repo.changes().map(\.path)), ["one.txt", "two.txt"])
     }
 
+    @MainActor
+    func testHomeDisplaysOnlySelectedRouteAndResumesDraft() async throws {
+        try write("home.txt", "base\n"); try repo.commit(["home.txt"], "base")
+        try write("home.txt", "working\n")
+        let model = Workspace(), navigation = ScreenNavigation()
+        model.launch(LaunchRequest(action: .open, paths: []))
+        let view = NSHostingView(rootView: ContentView(model: model, navigation: navigation))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1220, height: 820), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = view; window.makeKeyAndOrderFront(nil)
+        defer { window.close() }
+        func descendants(_ v: NSView) -> [NSView] { v.subviews.flatMap { [$0] + descendants($0) } }
+        func fileTables() -> [FileTableView] { descendants(view).compactMap { $0 as? FileTableView } }
+        func hosts() -> [RetainedScreenHost] { descendants(view).compactMap { $0 as? RetainedScreenHost } }
+        try await eventually { navigation.frames.count == 1 && hosts().count == 1 }
+        XCTAssertTrue(fileTables().isEmpty, "Home must never display a diff list")
+        try capture(view, name: "home-no-repository")
+        navigation.openUtility(.settings)
+        try await eventually { descendants(view).compactMap { $0 as? NSTextField }.contains { $0.placeholderString == "/usr/bin/git" } }
+        XCTAssertTrue(fileTables().isEmpty, "Settings works without a repository")
+        XCTAssertEqual(hosts().first?.subviews.count, 1)
+        navigation.back()
+        model.repositoryPath = root.path; model.openEnteredPath()
+        try await eventually { !model.busy && model.repository != nil }
+        XCTAssertEqual(model.action, .open); XCTAssertTrue(fileTables().isEmpty)
+        try capture(view, name: "home-repository")
+        navigation.openAction(.commit)
+        try await eventually { navigation.current?.model?.busy == false && fileTables().count == 1 }
+        let commitModel = try XCTUnwrap(navigation.current?.model), table = try XCTUnwrap(fileTables().first)
+        commitModel.message = "retained draft"; commitModel.selected = ["home.txt"]
+        navigation.home()
+        try await eventually { navigation.current?.model?.action == .open && fileTables().isEmpty && !model.busy }
+        XCTAssertEqual(hosts().first?.subviews.count, 1)
+        navigation.resume()
+        try await eventually { fileTables().first === table }
+        XCTAssertEqual(commitModel.message, "retained draft"); XCTAssertEqual(commitModel.selected, ["home.txt"])
+        navigation.home(); try await eventually { !model.busy }
+        for action in GitAction.allCases.filter({ $0 != .open }) {
+            navigation.openAction(action)
+            try await eventually { navigation.current?.model?.busy == false }
+            try await Task.sleep(nanoseconds: 150_000_000)
+            XCTAssertEqual(hosts().first?.subviews.count, 1, action.rawValue)
+            if ![GitAction.commit, .diff, .log].contains(action) { XCTAssertTrue(fileTables().isEmpty, action.rawValue) }
+            navigation.back()
+            try await eventually { fileTables().isEmpty }
+        }
+        // A context-menu request is another route in the same hosting container.
+        navigation.openRequest(LaunchRequest(action: .diff, paths: [root.path]))
+        try await eventually { navigation.current?.model?.busy == false && fileTables().count == 1 }
+        XCTAssertEqual(hosts().first?.subviews.count, 1)
+        XCTAssertFalse(descendants(view).contains { $0 is DiffPanesView })
+    }
+
     @MainActor private func eventually(_ condition: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async throws {
         let deadline = Date().addingTimeInterval(20)
         while !condition() && Date() < deadline { try await Task.sleep(nanoseconds: 50_000_000) }

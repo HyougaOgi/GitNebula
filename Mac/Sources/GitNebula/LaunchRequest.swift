@@ -1,11 +1,12 @@
 import Foundation
 
 enum GitAction: String, CaseIterable, Sendable {
-    case open, commit, diff, log, pull, push, fetch, switchBranch = "switch", clone, initialize = "init", stash, tags, remotes, tools, workspace
+    case open, commit, diff, log, pull, push, fetch, switchBranch = "switch", clone, initialize = "init", stash, tags, remotes
+    case cherryPick = "cherry-pick", revert, rebase, merge, tools, workspace
 
     var title: String {
         switch self {
-        case .open: return "Git 操作を選択"
+        case .open: return "ようこそ"
         case .commit: return "変更をコミット"
         case .diff: return "差分一覧"
         case .log: return "履歴を表示"
@@ -18,13 +19,17 @@ enum GitAction: String, CaseIterable, Sendable {
         case .stash: return "変更を退避（Stash）"
         case .tags: return "タグを管理"
         case .remotes: return "リモートを設定"
+        case .cherryPick: return "コミットを取り込む（Cherry-pick）"
+        case .revert: return "コミットを取り消す（Revert）"
+        case .rebase: return "ブランチの起点を移す（Rebase）"
+        case .merge: return "ブランチの変更を取り込む（Merge）"
         case .tools: return "その他の機能"
         case .workspace: return "リポジトリの管理"
         }
     }
     var hint: String {
         switch self {
-        case .open: return "Finder の右クリックから、必要な操作を直接開けます。"
+        case .open: return "リポジトリを開き、メニューバーから操作を選んでください。"
         case .commit: return "ファイルを確認して、メッセージを入力するだけ。"
         case .diff: return "変更ファイルの一覧です。ファイルを開くと、その差分を表示します。"
         case .log: return "コミットの一覧・説明・変更ファイルを表示します。"
@@ -37,6 +42,10 @@ enum GitAction: String, CaseIterable, Sendable {
         case .stash: return "変更を一時保存し、後で作業ツリーに戻します。"
         case .tags: return "リリースなどの目印をコミットに付けます。"
         case .remotes: return "取得・送信先の URL を登録・変更します。"
+        case .cherryPick: return "履歴からコミットを選び、現在のブランチに変更を取り込みます。"
+        case .revert: return "履歴からコミットを選び、変更を打ち消す新しいコミットを作ります。"
+        case .rebase: return "現在のブランチのコミットを選んだブランチの上につなぎ直します。"
+        case .merge: return "選んだブランチの変更を現在のブランチに取り込みます。"
         case .tools: return "履歴・ファイルの確認、履歴編集、パッチ、Worktree、Submodule の専用画面を開きます。"
         case .workspace: return "作業ファイル・ブランチ・競合解決・設定の画面を開きます。"
         }
@@ -55,6 +64,9 @@ enum GitAction: String, CaseIterable, Sendable {
         case .stash: return "archivebox"
         case .tags: return "tag"
         case .remotes: return "network"
+        case .cherryPick: return "arrow.turn.down.right"
+        case .revert: return "arrow.uturn.backward"
+        case .rebase, .merge: return "arrow.triangle.branch"
         case .tools: return "wrench.and.screwdriver"
         default: return "sparkles"
         }

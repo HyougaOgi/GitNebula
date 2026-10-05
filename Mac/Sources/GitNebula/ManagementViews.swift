@@ -58,11 +58,13 @@ struct IdentitySettingsView: View {
             Spacer()
         }.task {
             guard !loaded, let repo = model.repository else { return }
-            let result = await Task.detached { () -> (String, String) in
-                ((try? repo.run(["config", "--get", "user.name"]).trimmingCharacters(in: .newlines)) ?? "",
-                 (try? repo.run(["config", "--get", "user.email"]).trimmingCharacters(in: .newlines)) ?? "")
-            }.value
-            if !Task.isCancelled { name = result.0; email = result.1; loaded = true }
+            do {
+                let result = try await Task.detached { () -> (String, String) in
+                    (try repo.configuration("user.name") ?? "", try repo.configuration("user.email") ?? "")
+                }.value
+                if !Task.isCancelled { name = result.0; email = result.1; loaded = true }
+            } catch { if !Task.isCancelled { model.status = error.localizedDescription; model.failed = true } }
+
         }.accessibilityIdentifier("identitySettings")
     }
 }

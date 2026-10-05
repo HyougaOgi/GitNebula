@@ -6,23 +6,10 @@ public record Change(string Code, string Path, string? Original)
     public string Label => Code is "DD" or "AU" or "UD" or "UA" or "DU" or "AA" or "UU" ? "競合" :
         Code == "??" ? "新規" : Code.Contains('R') ? "名前変更" : Code.Contains('D') ? "削除" : Code.Contains('A') ? "追加" : "変更";
 }
-public sealed class GitRepository(string path)
+public sealed partial class GitRepository(string path)
 {
     public string Path { get; private set; } = path;
-    public async Task<string> Run(params string[] args)
-    {
-        var info = new ProcessStartInfo("git") { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true, StandardOutputEncoding = System.Text.Encoding.UTF8, StandardErrorEncoding = System.Text.Encoding.UTF8 };
-        info.Environment["GIT_TERMINAL_PROMPT"] = "0";
-        info.ArgumentList.Add("-C"); info.ArgumentList.Add(Path);
-        foreach (var arg in args) info.ArgumentList.Add(arg);
-        using var process = Process.Start(info) ?? throw new InvalidOperationException("Git を起動できません。");
-        var output = process.StandardOutput.ReadToEndAsync();
-        var error = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        var stderr = await error; var stdout = await output;
-        if (process.ExitCode != 0) throw new InvalidOperationException(stderr.Trim());
-        return stdout;
-    }
+    public Task<string> Run(params string[] args) => GitProcess.Run(Path, args);
     public async Task Open() => Path = (await Run("rev-parse", "--show-toplevel")).TrimEnd('\r', '\n');
     public async Task<List<Change>> Changes()
     {
@@ -38,23 +25,33 @@ public sealed class GitRepository(string path)
         }
         return result;
     }
+    public async Task<string?> Configuration(string key)
+    {
+        var text = (await GitProcess.RunAccepting(Path, ["config", "--get", key], [0, 1])).TrimEnd('\r', '\n');
+        return text.Length == 0 ? null : text;
+    }
     public async Task<string> Branch()
     {
-        try { return (await Run("symbolic-ref", "--short", "HEAD")).Trim(); }
-        catch (InvalidOperationException) { return "detached HEAD"; }
+        var text = (await GitProcess.RunAccepting(Path, ["symbolic-ref", "--quiet", "--short", "HEAD"], [0, 1])).TrimEnd('\r', '\n');
+        return text.Length == 0 ? "detached HEAD" : text;
+    }
+    public async Task<string?> HeadRevision()
+    {
+        var text = (await GitProcess.RunAccepting(Path, ["rev-parse", "--verify", "--quiet", "HEAD"], [0, 1])).TrimEnd('\r', '\n');
+        return text.Length == 0 ? null : text;
     }
     public async Task<string> Diff(string file)
     {
         var changes = await Changes();
         if (!changes.Any(item => item.Path == file)) throw new InvalidOperationException("変更一覧にないファイルです。");
         if (changes.Any(item => item.Path == file && item.Code == "??")) return ReadFile(file);
-        try { await Run("rev-parse", "--verify", "HEAD"); }
-        catch (InvalidOperationException) { return "初回コミット前のファイルです。"; }
-        var text = await Run("--literal-pathspecs", "diff", "HEAD", "--", file);
+        if (await HeadRevision() == null) return await Run("--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv", "--cached", "--", file);
+        var text = await Run("--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv", "HEAD", "--", file);
         return text.Length == 0 ? "未追跡ファイル、またはテキスト差分のない変更です。" : text;
     }
     public async Task Commit(string[] paths, string message)
     {
+        await RequireIdle();
         if ((await Conflicts()).Length > 0 || await MergeInProgress()) throw new InvalidOperationException("競合を解決し、「マージ完了」を使ってください。");
         var changes = await Changes();
         var available = changes.Select(item => item.Path).ToHashSet();
@@ -86,8 +83,8 @@ public sealed class GitRepository(string path)
         var repo = new GitRepository(target); await repo.Open(); return repo;
     }
     public async Task<string> Graph() => string.IsNullOrWhiteSpace(await Run("rev-list", "--all", "--max-count=1")) ? "まだコミットはありません。" : await Run("log", "--graph", "--all", "--decorate", "--oneline", "-100", "--no-color");
-    public async Task<string[]> Branches() => (await Run("for-each-ref", "--format=%(refname:short)", "refs/heads")).Split('\n', StringSplitOptions.RemoveEmptyEntries);
-    public async Task<string[]> Remotes() => (await Run("remote")).Split('\n', StringSplitOptions.RemoveEmptyEntries);
+    public async Task<string[]> Branches() => GitProcess.Lines(await Run("for-each-ref", "--format=%(refname:short)", "refs/heads"));
+    public async Task<string[]> Remotes() => GitProcess.Lines(await Run("remote"));
     private async Task<string> Remote(string name)
     {
         if (name.StartsWith('-') || !(await Remotes()).Contains(name)) throw new InvalidOperationException("登録済みのリモートを指定してください。");
@@ -100,45 +97,45 @@ public sealed class GitRepository(string path)
     }
     private async Task RequireClean()
     {
+        await RequireIdle();
         if ((await Changes()).Count > 0 || await MergeInProgress()) throw new InvalidOperationException("変更をコミットし、進行中のマージを完了してください。");
     }
     public async Task Fetch(string remote) => await Run("fetch", "--prune", await Remote(remote));
     public async Task<string> PreferredRemote()
     {
-        var branch = await Branch(); string configured;
-        try { configured = (await Run("config", "--get", $"branch.{branch}.remote")).Trim(); }
-        catch (InvalidOperationException) { configured = ""; }
+        var branch = await Branch(); var configured = await Configuration($"branch.{branch}.remote") ?? "";
         var names = await Remotes();
         return names.Contains(configured) ? configured : names.Contains("origin") ? "origin" : names.FirstOrDefault() ?? "";
     }
     public async Task<string> RemoteBranch(string remote)
     {
-        var branch = await ValidateBranch((await Run("symbolic-ref", "--short", "HEAD")).Trim());
-        try
-        {
-            var configured = (await Run("config", "--get", $"branch.{branch}.remote")).Trim();
-            var merge = (await Run("config", "--get", $"branch.{branch}.merge")).Trim();
-            if (configured == remote && merge.StartsWith("refs/heads/", StringComparison.Ordinal))
-            {
-                await Run("check-ref-format", merge); return merge;
-            }
+        var branch = await Branch();
+        if (branch == "detached HEAD") throw new InvalidOperationException("送受信するブランチを選んでください（現在は detached HEAD）。");
+        await ValidateBranch(branch);
+        var configured = await Configuration($"branch.{branch}.remote");
+        var merge = await Configuration($"branch.{branch}.merge");
+        if (configured == remote && merge != null && merge.StartsWith("refs/heads/", StringComparison.Ordinal)) {
+            await Run("check-ref-format", merge); return merge;
         }
-        catch (InvalidOperationException) { }
         return $"refs/heads/{branch}";
     }
     public async Task Pull(string remote)
     {
         await RequireClean(); await Run("pull", "--ff-only", await Remote(remote), await RemoteBranch(remote));
     }
-    public async Task Push(string remote) => await Run("push", "--set-upstream", await Remote(remote), "HEAD:" + await RemoteBranch(remote));
+    public async Task Push(string remote)
+    {
+        if (await HeadRevision() == null) throw new InvalidOperationException("Push する前に最初のコミットを作成してください。");
+        await Run("push", "--set-upstream", await Remote(remote), "HEAD:" + await RemoteBranch(remote));
+    }
     public async Task CreateBranch(string name) { await RequireClean(); await Run("switch", "-c", await ValidateBranch(name)); }
     public async Task SwitchBranch(string name)
     {
         await RequireClean(); if (!(await Branches()).Contains(name)) throw new InvalidOperationException("ローカルブランチを選択してください。");
         await Run("switch", "--", await ValidateBranch(name));
     }
-    public async Task RenameBranch(string oldName, string newName) => await Run("branch", "-m", await ValidateBranch(oldName), await ValidateBranch(newName));
-    public async Task DeleteBranch(string name) => await Run("branch", "-d", "--", await ValidateBranch(name));
+    public async Task RenameBranch(string oldName, string newName) { await RequireIdle(); await Run("branch", "-m", await ValidateBranch(oldName), await ValidateBranch(newName)); }
+    public async Task DeleteBranch(string name) { await RequireIdle(); await Run("branch", "-d", "--", await ValidateBranch(name)); }
     public async Task Merge(string name) { await RequireClean(); await Run("merge", "--no-edit", "--", await ValidateBranch(name)); }
     public async Task<string[]> Conflicts() => (await Run("diff", "--name-only", "--diff-filter=U", "-z")).Split('\0', StringSplitOptions.RemoveEmptyEntries);
     public async Task<bool> MergeInProgress() => File.Exists((await Run("rev-parse", "--path-format=absolute", "--git-path", "MERGE_HEAD")).TrimEnd('\r', '\n'));
@@ -148,7 +145,7 @@ public sealed class GitRepository(string path)
         var target = System.IO.Path.GetFullPath(System.IO.Path.Combine(root, file));
         if (System.IO.Path.IsPathRooted(file) || !target.StartsWith(root, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("リポジトリ内のファイルを指定してください。");
         for (var parent = System.IO.Path.GetDirectoryName(target); parent != null && parent.Length >= root.Length; parent = System.IO.Path.GetDirectoryName(parent))
-            if ((File.GetAttributes(parent) & FileAttributes.ReparsePoint) != 0) throw new InvalidOperationException("リンク先のファイルは外部で操作してください。");
+            if (Directory.Exists(parent) && (File.GetAttributes(parent) & FileAttributes.ReparsePoint) != 0) throw new InvalidOperationException("リンク先のファイルは外部で操作してください。");
         return target;
     }
     public string ReadFile(string file, bool editable = false)

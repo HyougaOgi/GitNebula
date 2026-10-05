@@ -200,7 +200,7 @@ struct RepositoryToolsView: View {
         guard let repo = model.repository else { return }
         model.perform({
             let result = try work(repo)
-            return (try Snapshot(repo), result)
+            return (try Snapshot.afterOperation(repo), result)
         }, success: "完了しました。", notifiesChanges: true) { snapshot, result in
             model.apply(snapshot); output = result
         }
@@ -235,6 +235,7 @@ struct RepositoryToolsView: View {
                     Button("削除") { let id = stashID; confirm("選択した退避データを削除します。") { execute { try $0.dropStash(id); return "削除しました。" } } }
                 }.disabled(stashID.isEmpty)
             }
+            if !model.changes.isEmpty { Text("退避を戻す前に、現在の変更をコミットまたは退避してください。").font(.caption).foregroundStyle(.secondary) }
             Button("一覧を更新", action: refresh)
         }
     }
@@ -286,7 +287,13 @@ struct RepositoryToolsView: View {
     }
     private var toolsForm: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if let title = tool.fields.first { field(title, $first) }
+            if tool == .rebase {
+                Text("現在のブランチ \(model.branch) のコミットを、選択したブランチの先端につなぎ直します。コミット ID が変わります。")
+                Picker("新しい起点のブランチ", selection: $first) {
+                    Text("ブランチを選択").tag("")
+                    ForEach(model.branches.filter { $0 != model.branch }, id: \.self) { Text($0).tag($0) }
+                }.onAppear { if first == "HEAD" { first = model.branches.first { $0 != model.branch } ?? "" } }
+            } else if let title = tool.fields.first { field(title, $first) }
             if tool.fields.count > 1 { field(tool.fields[1], $second) }
             Button(tool.title) {
                 let selectedTool = tool, a = first, b = second

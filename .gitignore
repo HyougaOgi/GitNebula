@@ -29,3 +29,4 @@ venv/
 *.provisionprofile
 secrets/
 *.local.json
+codex_exe.sh

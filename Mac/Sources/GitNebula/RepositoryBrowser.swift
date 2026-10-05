@@ -97,7 +97,7 @@ struct DiffDocument: Identifiable, Sendable {
 
 extension GitRepository {
     func history(reference: String? = nil, limit: Int = 200, skip: Int = 0, file: String? = nil) throws -> [CommitRecord] {
-        let head = try? revision("HEAD")
+        let head = try headRevision()
         if reference == nil && head == nil {
             if try run(["rev-list", "--all", "--max-count=1"]).isEmpty { return [] }
         }

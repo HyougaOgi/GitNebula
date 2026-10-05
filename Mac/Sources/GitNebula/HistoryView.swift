@@ -7,6 +7,7 @@ struct HistoryBrowserView: View {
     let branches: [String]
     let refreshID: UUID
     var file: String? = nil
+    var model: Workspace? = nil
     @State private var commits: [CommitRecord] = []
     @State private var selection: String?
     @State private var query = ""
@@ -61,7 +62,7 @@ struct HistoryBrowserView: View {
                     }.padding(8)
                 }.frame(minHeight: 160, idealHeight: 240, maxHeight: 380)
                 if let commit = current {
-                    CommitInspector(repo: repo, commit: commit).id(commit.id).frame(minHeight: 330, maxHeight: .infinity)
+                    CommitInspector(repo: repo, commit: commit, model: model).id(commit.id).frame(minHeight: 330, maxHeight: .infinity)
                 } else { BrowserPlaceholder(title: "コミットを選択", detail: "コミットの説明と変更ファイル一覧を表示します。", symbol: "clock.arrow.circlepath").frame(minHeight: 250) }
             }
         }
@@ -84,6 +85,7 @@ struct HistoryBrowserView: View {
 struct CommitInspector: View {
     let repo: GitRepository
     let commit: CommitRecord
+    var model: Workspace? = nil
     @State private var parent: String?
     private var base: String? { parent ?? commit.parents.first }
     var body: some View {
@@ -110,9 +112,28 @@ struct CommitInspector: View {
                 Spacer()
                 if !commit.decorations.isEmpty { Label(commit.decorations, systemImage: "tag").font(.caption).foregroundStyle(.cyan).lineLimit(1) }
             }.padding(.horizontal, 10)
+            if let model {
+                HStack {
+                    Button("この変更を取り込む（Cherry-pick）") { run(.cherryPick, model: model) }
+                    Button("このコミットを取り消す（Revert）") { run(.revert, model: model) }
+                    Text("現在: " + model.branch).font(.caption).foregroundStyle(.secondary)
+                }.padding(.horizontal, 10).disabled(model.busy || model.sequence != nil || !model.changes.isEmpty || commit.parents.count > 1)
+                if commit.parents.count > 1 { Text("マージコミットの履歴操作には親の指定が必要なため、この画面からは実行できません。").font(.caption).foregroundStyle(.secondary) }
+            }
             RevisionFilesView(repo: repo, base: base, target: commit.id)
         }.accessibilityIdentifier("commitInspector")
     }
+    private func run(_ tool: RepositoryTool, model: Workspace) {
+        let alert = NSAlert(); alert.messageText = tool.title
+        alert.informativeText = "\(tool.confirmation ?? "")\n対象: \(commit.shortID) · \(commit.subject)\n実行先: \(model.branch)\nリポジトリ: \(repo.path)"
+        alert.addButton(withTitle: "実行"); alert.addButton(withTitle: "キャンセル")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let id = commit.id
+        model.operation(success: tool == .revert ? "Revert が完了しました。履歴を残したまま変更を取り消しました。" : "Cherry-pick が完了しました。") {
+            if tool == .revert { try $0.revert(id) } else { try $0.cherryPick(id) }
+        }
+    }
+
 }
 
 @MainActor

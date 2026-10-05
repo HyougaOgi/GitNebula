@@ -21,31 +21,20 @@ struct GitRepository: Sendable {
         String(decoding: try runData(args), as: UTF8.self)
     }
     func runData(_ args: [String], accepting statuses: Set<Int32> = [0]) throws -> Data {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = ["-C", path] + args
-        var environment = ProcessInfo.processInfo.environment
-        environment["GIT_TERMINAL_PROMPT"] = "0"
-        process.environment = environment
-        process.standardInput = FileHandle.nullDevice
-        // File-backed output avoids a full pipe blocking the child on large diffs.
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let output = directory.appendingPathComponent("stdout")
-        let error = directory.appendingPathComponent("stderr")
-        FileManager.default.createFile(atPath: output.path, contents: nil)
-        FileManager.default.createFile(atPath: error.path, contents: nil)
-        let stdout = try FileHandle(forWritingTo: output)
-        let stderr = try FileHandle(forWritingTo: error)
-        defer { try? stdout.close(); try? stderr.close() }
-        process.standardOutput = stdout; process.standardError = stderr
-        try process.run(); process.waitUntilExit()
-        guard statuses.contains(process.terminationStatus) else {
-            let details = String(decoding: try Data(contentsOf: output), as: UTF8.self) + String(decoding: try Data(contentsOf: error), as: UTF8.self)
-            throw NSError(domain: "GitNebula", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: details.isEmpty ? "Git が終了コード \(process.terminationStatus) で失敗しました。" : details])
-        }
-        return try Data(contentsOf: output)
+        try GitProcess.run(in: path, arguments: args, accepting: statuses)
+    }
+
+    func configuration(_ key: String) throws -> String? {
+        let text = String(decoding: try runData(["config", "--get", key], accepting: [0, 1]), as: UTF8.self).trimmingCharacters(in: .newlines)
+        return text.isEmpty ? nil : text
+    }
+    func currentBranch() throws -> String {
+        let text = String(decoding: try runData(["symbolic-ref", "--quiet", "--short", "HEAD"], accepting: [0, 1]), as: UTF8.self).trimmingCharacters(in: .newlines)
+        return text.isEmpty ? "detached HEAD" : text
+    }
+    func headRevision() throws -> String? {
+        let text = String(decoding: try runData(["rev-parse", "--verify", "--quiet", "HEAD"], accepting: [0, 1]), as: UTF8.self).trimmingCharacters(in: .newlines)
+        return text.isEmpty ? nil : text
     }
     func changes() throws -> [Change] {
         let entries = try run(["status", "--porcelain=v1", "-z", "--untracked-files=all"]).split(separator: "\0", omittingEmptySubsequences: false)
@@ -64,10 +53,10 @@ struct GitRepository: Sendable {
         let changes = try changes()
         guard changes.contains(where: { $0.path == file }) else { throw failure("変更一覧にないファイルです") }
         if changes.contains(where: { $0.path == file && $0.code == "??" }) { return try readFile(file) }
-        if (try? run(["rev-parse", "--verify", "HEAD"])) == nil {
-            return "初回コミット前のファイルです。"
+        if try headRevision() == nil {
+            return try run(["--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv", "--cached", "--", file])
         }
-        let text = try run(["--literal-pathspecs", "diff", "HEAD", "--", file])
+        let text = try run(["--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv", "HEAD", "--", file])
         return text.isEmpty ? "未追跡ファイル、またはテキスト差分のない変更です。" : text
     }
     func commit(_ files: [String], _ message: String) throws {
@@ -134,16 +123,17 @@ struct GitRepository: Sendable {
     }
     func fetch(_ name: String) throws { _ = try run(["fetch", "--prune", remote(name)]) }
     func preferredRemote() throws -> String {
-        let branch = (try? run(["symbolic-ref", "--short", "HEAD"]))?.trimmingCharacters(in: .newlines) ?? ""
-        let configured = (try? run(["config", "--get", "branch.\(branch).remote"]))?.trimmingCharacters(in: .newlines) ?? ""
+        let branch = try currentBranch()
+        let configured = try configuration("branch.\(branch).remote") ?? ""
         let names = try remotes()
         return names.contains(configured) ? configured : names.contains("origin") ? "origin" : names.first ?? ""
     }
     func remoteBranch(_ name: String) throws -> String {
-        let branch = try run(["symbolic-ref", "--short", "HEAD"]).trimmingCharacters(in: .newlines)
+        let branch = try currentBranch()
+        guard branch != "detached HEAD" else { throw failure("送受信するブランチを選んでください（現在は detached HEAD）。") }
         _ = try validateBranch(branch)
-        let configured = (try? run(["config", "--get", "branch.\(branch).remote"]))?.trimmingCharacters(in: .newlines)
-        if configured == name, let merge = (try? run(["config", "--get", "branch.\(branch).merge"]))?.trimmingCharacters(in: .newlines), merge.hasPrefix("refs/heads/") {
+        let configured = try configuration("branch.\(branch).remote")
+        if configured == name, let merge = try configuration("branch.\(branch).merge"), merge.hasPrefix("refs/heads/") {
             _ = try run(["check-ref-format", merge]); return merge
         }
         return "refs/heads/\(branch)"
@@ -153,6 +143,7 @@ struct GitRepository: Sendable {
         _ = try run(["pull", "--ff-only", remote(name), remoteBranch(name)])
     }
     func push(_ name: String) throws {
+        guard try headRevision() != nil else { throw failure("Push する前に最初のコミットを作成してください。") }
         _ = try run(["push", "--set-upstream", remote(name), "HEAD:" + remoteBranch(name)])
     }
     func createBranch(_ name: String) throws { try requireClean(); _ = try run(["switch", "-c", validateBranch(name)]) }
@@ -161,8 +152,8 @@ struct GitRepository: Sendable {
         guard try branches().contains(name) else { throw failure("ローカルブランチを選択してください") }
         _ = try run(["switch", "--", validateBranch(name)])
     }
-    func renameBranch(_ old: String, _ new: String) throws { _ = try run(["branch", "-m", validateBranch(old), validateBranch(new)]) }
-    func deleteBranch(_ name: String) throws { _ = try run(["branch", "-d", "--", validateBranch(name)]) }
+    func renameBranch(_ old: String, _ new: String) throws { try requireIdle(); _ = try run(["branch", "-m", validateBranch(old), validateBranch(new)]) }
+    func deleteBranch(_ name: String) throws { try requireIdle(); _ = try run(["branch", "-d", "--", validateBranch(name)]) }
     func merge(_ name: String) throws { try requireClean(); _ = try run(["merge", "--no-edit", "--", validateBranch(name)]) }
     func conflicts() throws -> [String] { try run(["diff", "--name-only", "--diff-filter=U", "-z"]).split(separator: "\0").map(String.init) }
     func mergeInProgress() throws -> Bool {
