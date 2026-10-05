@@ -14,69 +14,6 @@ struct BrowserPlaceholder: View {
     }
 }
 
-@MainActor
-struct FileDiffBrowser: View {
-    let repo: GitRepository
-    let files: [Change]
-    var base: String? = "HEAD"
-    var target: String? = nil
-    var refreshID = UUID()
-    var allowsChecking = false
-    @Binding var checked: Set<String>
-    @State private var active: String?
-    @State private var query = ""
-    @State private var document: DiffDocument?
-    @State private var loading = false
-    @State private var error: String?
-    private var filtered: [Change] { files.filter { query.isEmpty || $0.path.localizedCaseInsensitiveContains(query) } }
-    private var current: Change? { filtered.first { $0.path == active } ?? filtered.first }
-
-    var body: some View {
-        HSplitView {
-            VStack(alignment: .leading, spacing: 0) {
-                TextField("ファイルを絞り込み", text: $query).textFieldStyle(.roundedBorder).padding(10)
-                    .accessibilityIdentifier("diffFileSearch")
-                HStack { Text("変更ファイル").font(.headline); Spacer(); Text("\(filtered.count)").foregroundStyle(.secondary) }.padding(.horizontal, 12).padding(.bottom, 8)
-                List(selection: Binding(get: { current?.path }, set: { active = $0 })) {
-                    ForEach(filtered) { file in
-                        HStack(spacing: 8) {
-                            if allowsChecking {
-                                Toggle("コミット対象: " + file.path, isOn: Binding(get: { checked.contains(file.path) }, set: { if $0 { checked.insert(file.path) } else { checked.remove(file.path) } })).labelsHidden()
-                            }
-                            Image(systemName: file.code.contains("D") ? "minus.square" : file.code == "??" || file.code.contains("A") ? "plus.square" : "pencil.circle")
-                                .foregroundStyle(file.code.contains("D") ? .red : file.code == "??" || file.code.contains("A") ? .green : .orange)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(URL(fileURLWithPath: file.path).lastPathComponent).lineLimit(1)
-                                Text(file.original.map { $0 + " → " + file.path } ?? file.path).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                            }
-                            Spacer(minLength: 0)
-                            Text(file.label).font(.caption2).foregroundStyle(.secondary)
-                        }.padding(.vertical, 4).tag(file.path).help(file.path)
-                    }
-                }.listStyle(.sidebar).accessibilityIdentifier("diffFileList")
-            }.frame(minWidth: 220, idealWidth: 260, maxWidth: 380)
-            VStack(spacing: 0) {
-                if loading { ProgressView("変更前後を読み込み中…").frame(maxWidth: .infinity, maxHeight: .infinity) }
-                else if let error { BrowserPlaceholder(title: "差分を読み込めませんでした", detail: error, symbol: "exclamationmark.triangle") }
-                else if let document { SideBySideDiffView(document: document).id(document.id) }
-                else { BrowserPlaceholder(title: files.isEmpty ? "未コミットの変更はありません" : "該当するファイルはありません", detail: "変更ファイルを選択すると、変更前と変更後を左右で比較できます。") }
-            }.frame(minWidth: 520, maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .background(Color(nsColor: .textBackgroundColor).opacity(0.6))
-        .task(id: [repo.path, current?.path ?? "", base ?? "", target ?? "", refreshID.uuidString]) {
-            document = nil; error = nil
-            guard let file = current else { loading = false; return }
-            loading = true
-            let repository = repo, from = base, to = target
-            do {
-                let result = try await Task.detached(priority: .userInitiated) { try repository.comparison(file, from: from, to: to) }.value
-                guard !Task.isCancelled else { return }
-                document = result
-            } catch { if !Task.isCancelled { self.error = error.localizedDescription } }
-            if !Task.isCancelled { loading = false }
-        }
-    }
-}
 
 struct SideBySideDiffView: View {
     let document: DiffDocument
@@ -188,6 +125,7 @@ final class DiffPanesView: NSView {
     private var lastNavigation = -1
     override init(frame: NSRect) {
         super.init(frame: frame)
+        wantsLayer = true; layer?.masksToBounds = true
         for (scroll, text, isBefore) in [(before, oldText, true), (after, newText, false)] {
             scroll.translatesAutoresizingMaskIntoConstraints = false; addSubview(scroll)
             scroll.hasVerticalScroller = true; scroll.hasHorizontalScroller = true; scroll.borderType = .noBorder

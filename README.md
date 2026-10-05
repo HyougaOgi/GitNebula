@@ -65,11 +65,11 @@ Install the file-manager integration from your [platform guide](#getting-started
 3. Review the preselected changes, enter a message, and click **コミット**.
 4. Read the result and close the dialog.
 
-**差分を確認** and **履歴を表示** open their own views. **Pull / Push / Fetch** show the repository, current branch and remote, then run when you click the action button. **ブランチを切り替え** only asks for the target branch. **Clone** starts directly at its source/destination form and uses the clicked location as the parent folder.
+**差分一覧** (macOS; **差分を確認** on other platforms) and **履歴を表示** open their own views. On macOS, lists contain no inline comparison: open a file to see its read-only comparison, then use **戻る** to return with selection, scroll and drafts preserved. **Pull / Push / Fetch** show the repository, current branch and remote, then run when you click the action button. **ブランチを切り替え** only asks for the target branch. **Clone** starts directly at its source/destination form and uses the clicked location as the parent folder.
 
-Commit and diff are scoped to the selected files or folder descendants. History and remote operations apply to the repository. Finder and Linux accept multiple selections within one repository; Explorer uses one selected file/folder per dialog. A folder selection includes its descendants. Advanced branch and merge tools are under **詳細操作**; conflict controls appear only when needed.
+Commit and diff are scoped to the selected files or folder descendants. History and remote operations apply to the repository. Finder and Linux accept multiple selections within one repository; Explorer uses one selected file/folder per dialog. A folder selection includes its descendants. On macOS, **リポジトリの管理** opens dedicated working-file, branch, conflict and identity screens; other platforms retain **詳細操作**.
 
-Launching the application normally shows an editable repository path and an operation chooser. Type/paste a path and press Enter, or use the folder picker. **その他の操作** switches between dialogs. UI labels use Japanese descriptions alongside standard Git terms. See [the interaction specification](shared/DESIGN.md).
+Launching the application normally shows an editable repository path and an operation chooser. Type/paste a path and press Enter, or use the folder picker. macOS navigates into dedicated screens with a Back button; **その他の機能** is a launcher for advanced tools. Other platforms retain **その他の操作**. UI labels use Japanese descriptions alongside standard Git terms. See [the interaction specification](shared/DESIGN.md).
 
 Pull accepts fast-forward updates only. Pull and Push respect an existing upstream branch even when its name differs from the local branch; the configured remote is preselected. Branch deletion uses Git's merged-branch check. Branch switching and merging require a clean working tree. Git hooks run normally.
 

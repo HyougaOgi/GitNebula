@@ -1,7 +1,7 @@
 import SwiftUI
 import AppKit
 
-private enum RepositoryTool: String, CaseIterable {
+enum RepositoryTool: String, CaseIterable {
     case show, compare, blame, fileLog, reflog, cherryPick, revert, rebase, resetSoft, resetMixed, resetHard
     case exportPatch, checkPatch, applyPatch, listWorktrees, addWorktree, listSubmodules, addSubmodule, updateSubmodules
     var title: String {
@@ -89,6 +89,8 @@ private enum RepositoryTool: String, CaseIterable {
 @MainActor
 struct RepositoryToolsView: View {
     @ObservedObject var model: Workspace
+    @Environment(\.screenActions) private var navigation
+    let tool: RepositoryTool
     @State private var stashes: [StashEntry] = []
     @State private var stashID = ""
     @State private var stashMessage = ""
@@ -100,36 +102,29 @@ struct RepositoryToolsView: View {
     @State private var tagMessage = ""
     @State private var remoteName = "origin"
     @State private var remoteURL = ""
-    @State private var userName = ""
-    @State private var userEmail = ""
-    @State private var tool = RepositoryTool.show
     @State private var first = "HEAD"
     @State private var second = "HEAD"
     @State private var output = ""
-    @State private var previewTool: RepositoryTool? = .show
+    @State private var previewTool: RepositoryTool?
     @State private var previewFirst = "HEAD"
     @State private var previewSecond = "HEAD"
     @State private var selectedRemote: String?
+
+    init(model: Workspace, tool: RepositoryTool = .show) {
+        self.model = model; self.tool = tool
+        let firstDefault = [.show, .compare, .cherryPick, .revert, .rebase, .resetSoft, .resetMixed, .resetHard].contains(tool) ? "HEAD" : ""
+        _first = State(initialValue: firstDefault)
+        _second = State(initialValue: [.blame, .compare].contains(tool) ? "HEAD" : "")
+        _previewTool = State(initialValue: [.reflog, .listWorktrees, .listSubmodules].contains(tool) ? tool : nil)
+    }
 
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let repo = model.repository {
-                if model.action == .stash || model.action == .tags {
-                    HSplitView {
-                        ScrollView {
-                            VStack(alignment: .leading, spacing: 12) {
-                                if model.action == .stash { stashForm }
-                                else { tagForm }
-                            }.padding(10)
-                        }.frame(minWidth: 300, idealWidth: 340, maxWidth: 410)
-                        Group {
-                            if model.action == .stash && !stashID.isEmpty { StashComparisonView(repo: repo, reference: stashID).id(stashID) }
-                            else if model.action == .tags && !tag.isEmpty { CommitReferenceView(repo: repo, reference: "refs/tags/" + tag).id([tag, model.revisionID.uuidString]) }
-                            else { BrowserPlaceholder(title: model.action == .stash ? "退避データを選択" : "タグを選択", detail: "内容と変更前後をここに表示します。", symbol: model.action == .stash ? "archivebox" : "tag") }
-                        }.frame(minWidth: 580, maxWidth: .infinity, maxHeight: .infinity)
-                    }
-                } else if model.action == .remotes {
+                if model.action == .stash { stashForm }
+                else if model.action == .tags { tagForm }
+                else if model.action == .remotes {
                     remoteSettings
                 } else {
                     toolsForm
@@ -160,16 +155,16 @@ struct RepositoryToolsView: View {
     @ViewBuilder private func toolPreview(_ repo: GitRepository) -> some View {
         if let previewTool {
             switch previewTool {
-            case .show: CommitReferenceView(repo: repo, reference: previewFirst).id(previewFirst)
-            case .compare: RevisionDiffBrowser(repo: repo, base: previewFirst, target: previewSecond)
+            case .show: CommitReferenceView(repo: repo, reference: previewFirst, refreshKey: model.revisionID.uuidString)
+            case .compare: RevisionFilesView(repo: repo, base: previewFirst, target: previewSecond, refreshKey: model.revisionID.uuidString)
             case .fileLog: HistoryBrowserView(repo: repo, branches: model.branches, refreshID: model.revisionID, file: previewFirst)
-            case .blame: RepositoryRecordsView(repo: repo, kind: .blame, first: previewFirst, second: previewSecond)
-            case .reflog: RepositoryRecordsView(repo: repo, kind: .reflog)
-            case .listWorktrees, .addWorktree: RepositoryRecordsView(repo: repo, kind: .worktrees).id(model.revisionID)
-            case .listSubmodules, .addSubmodule, .updateSubmodules: RepositoryRecordsView(repo: repo, kind: .submodules).id(model.revisionID)
+            case .blame: RepositoryRecordsView(repo: repo, kind: .blame, first: previewFirst, second: previewSecond, refreshKey: model.revisionID.uuidString)
+            case .reflog: RepositoryRecordsView(repo: repo, kind: .reflog, refreshKey: model.revisionID.uuidString)
+            case .listWorktrees, .addWorktree: RepositoryRecordsView(repo: repo, kind: .worktrees, refreshKey: model.revisionID.uuidString)
+            case .listSubmodules, .addSubmodule, .updateSubmodules: RepositoryRecordsView(repo: repo, kind: .submodules, refreshKey: model.revisionID.uuidString)
             default: BrowserPlaceholder(title: "対象と操作結果を確認", detail: "上のフォームで対象を指定して実行します。", symbol: "wrench.and.screwdriver")
             }
-        } else { BrowserPlaceholder(title: "操作を選択", symbol: "wrench.and.screwdriver") }
+        } else { BrowserPlaceholder(title: "対象を指定してください", detail: "上の入力欄で対象を指定し、実行ボタンを押してください。", symbol: "wrench.and.screwdriver") }
     }
     private var remoteSettings: some View {
         HSplitView {
@@ -180,18 +175,6 @@ struct RepositoryToolsView: View {
                 Button("新しいリモート") { selectedRemote = nil; remoteName = ""; remoteURL = "" }
             }.frame(minWidth: 160, idealWidth: 190, maxWidth: 240)
             ScrollView { remoteForm.padding(.leading, 12) }.frame(minWidth: 400)
-        }
-        .task(id: model.repository?.path) {
-            guard let repo = model.repository else { return }
-            let identity = await Task.detached { () -> (String, String) in
-                let name = (try? repo.run(["config", "--get", "user.name"]))?.trimmingCharacters(in: .newlines) ?? ""
-                let email = (try? repo.run(["config", "--get", "user.email"]))?.trimmingCharacters(in: .newlines) ?? ""
-                return (name, email)
-            }.value
-            if !Task.isCancelled {
-                if userName.isEmpty { userName = identity.0 }
-                if userEmail.isEmpty { userEmail = identity.1 }
-            }
         }
         .task(id: selectedRemote) {
             guard let repo = model.repository, let name = selectedRemote else { return }
@@ -218,11 +201,11 @@ struct RepositoryToolsView: View {
         model.perform({
             let result = try work(repo)
             return (try Snapshot(repo), result)
-        }, success: "完了しました。") { snapshot, result in
+        }, success: "完了しました。", notifiesChanges: true) { snapshot, result in
             model.apply(snapshot); output = result
         }
     }
-    private func refresh() { execute { _ in "" } }
+    private func refresh() { model.refresh() }
     private var stashForm: some View {
         VStack(alignment: .leading, spacing: 12) {
             field("退避メモ", $stashMessage)
@@ -241,8 +224,12 @@ struct RepositoryToolsView: View {
                             Text(entry.title).lineLimit(3)
                         }.padding(.vertical, 4).tag(entry.id)
                     }
-                }.frame(height: 180).accessibilityIdentifier("stashList")
+                }.frame(minHeight: 200, maxHeight: .infinity).accessibilityIdentifier("stashList")
+                Text(stashes.first { $0.id == stashID }?.title ?? "").font(.callout).textSelection(.enabled)
                 HStack {
+                    Button("変更ファイル一覧") {
+                        if let repo = model.repository { navigation.openRevision(repo, stashID, true) }
+                    }.accessibilityIdentifier("openStashFiles")
                     Button("適用（退避を残す）") { let id = stashID; execute { try $0.applyStash(id); return "適用しました。退避データは残っています。" } }
                     Button("取り出す（Pop）") { let id = stashID; execute { try $0.applyStash(id, pop: true); return "退避を取り出しました。" } }
                     Button("削除") { let id = stashID; confirm("選択した退避データを削除します。") { execute { try $0.dropStash(id); return "削除しました。" } } }
@@ -262,8 +249,11 @@ struct RepositoryToolsView: View {
             Divider()
             if tags.isEmpty { Text("タグはありません。") }
             else {
-                List(tags, id: \.self, selection: Binding(get: { Optional(tag) }, set: { tag = $0 ?? "" })) { name in Label(name, systemImage: "tag").tag(name) }.frame(height: 170).accessibilityIdentifier("tagList")
+                List(tags, id: \.self, selection: Binding(get: { Optional(tag) }, set: { tag = $0 ?? "" })) { name in Label(name, systemImage: "tag").tag(name) }.frame(minHeight: 200, maxHeight: .infinity).accessibilityIdentifier("tagList")
                 HStack {
+                    Button("変更ファイル一覧") {
+                        if let repo = model.repository { navigation.openRevision(repo, "refs/tags/" + tag, false) }
+                    }.disabled(tag.isEmpty).accessibilityIdentifier("openTagFiles")
                     Button("ローカルから削除") { let name = tag; confirm("ローカルのタグ「\(name)」を削除します。") { execute { try $0.deleteTag(name); return "削除しました。" } } }
                 }
                 if !model.remotes.isEmpty {
@@ -291,28 +281,18 @@ struct RepositoryToolsView: View {
                 }.disabled(!model.remotes.contains(remoteName))
                 Button("一覧を更新", action: refresh)
             }
-            Divider()
-            Text("このリポジトリのコミット作成者").font(.headline)
-            HStack { field("名前", $userName); field("メールアドレス", $userEmail) }
-            Button("作成者を保存") {
-                let name = userName, email = userEmail
-                execute { try $0.setIdentity(name: name, email: email); return "コミット作成者を保存しました。" }
-            }.disabled(userName.isEmpty || userEmail.isEmpty)
+
         }
     }
     private var toolsForm: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Picker("操作", selection: $tool) { ForEach(RepositoryTool.allCases, id: \.self) { Text($0.title).tag($0) } }
-                .onChange(of: tool) { value in
-                    output = ""; previewTool = nil; first = [.show, .cherryPick, .revert, .rebase, .resetSoft, .resetMixed, .resetHard].contains(value) ? "HEAD" : ""; second = value == .blame || value == .compare ? "HEAD" : ""
-                }
-            Text(tool.hint).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if let title = tool.fields.first { field(title, $first) }
             if tool.fields.count > 1 { field(tool.fields[1], $second) }
             Button(tool.title) {
                 let selectedTool = tool, a = first, b = second
                 if [.show, .compare, .fileLog, .blame, .reflog, .listWorktrees, .listSubmodules].contains(selectedTool) {
                     output = ""; previewFirst = a; previewSecond = b; previewTool = selectedTool
+                    model.refresh()
                     return
                 }
                 let run = {

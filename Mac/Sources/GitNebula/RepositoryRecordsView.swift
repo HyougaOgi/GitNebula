@@ -76,6 +76,7 @@ struct RepositoryRecordsView: View {
     let kind: RepositoryRecordKind
     var first = ""
     var second = ""
+    var refreshKey = ""
     @State private var rows: [RepositoryRecord] = []
     @State private var selection: Int?
     @State private var loading = false
@@ -103,7 +104,7 @@ struct RepositoryRecordsView: View {
                 else if rows.isEmpty { Text("表示する項目はありません").foregroundStyle(.secondary) }
             }
             Text("\(rows.count) 件").font(.caption).foregroundStyle(.secondary)
-        }.task(id: [repo.path, kind.rawValue, first, second]) {
+        }.task(id: [repo.path, kind.rawValue, first, second, refreshKey]) {
             loading = true; error = nil
             let repository = repo, type = kind, a = first, b = second
             do {

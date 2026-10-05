@@ -62,7 +62,7 @@ struct HistoryBrowserView: View {
                 }.frame(minHeight: 160, idealHeight: 240, maxHeight: 380)
                 if let commit = current {
                     CommitInspector(repo: repo, commit: commit).id(commit.id).frame(minHeight: 330, maxHeight: .infinity)
-                } else { BrowserPlaceholder(title: "コミットを選択", detail: "変更ファイルと、そのコミットの変更前後を表示します。", symbol: "clock.arrow.circlepath").frame(minHeight: 250) }
+                } else { BrowserPlaceholder(title: "コミットを選択", detail: "コミットの説明と変更ファイル一覧を表示します。", symbol: "clock.arrow.circlepath").frame(minHeight: 250) }
             }
         }
         .task(id: [repo.path, reference, String(limit), refreshID.uuidString, file ?? ""]) {
@@ -110,34 +110,39 @@ struct CommitInspector: View {
                 Spacer()
                 if !commit.decorations.isEmpty { Label(commit.decorations, systemImage: "tag").font(.caption).foregroundStyle(.cyan).lineLimit(1) }
             }.padding(.horizontal, 10)
-            RevisionDiffBrowser(repo: repo, base: base, target: commit.id)
+            RevisionFilesView(repo: repo, base: base, target: commit.id)
         }.accessibilityIdentifier("commitInspector")
     }
 }
 
 @MainActor
-struct RevisionDiffBrowser: View {
+struct RevisionFilesView: View {
     let repo: GitRepository
     let base: String?
     let target: String
+    var refreshKey = ""
     @State private var files: [Change] = []
     @State private var loading = false
     @State private var error: String?
-    @State private var refreshID = UUID()
+    @State private var resolvedBase: String?
+    @State private var resolvedTarget: String?
     var body: some View {
-        Group {
-            if loading { ProgressView("変更ファイルを読み込み中…").frame(maxWidth: .infinity, maxHeight: .infinity) }
-            else if let error { BrowserPlaceholder(title: "比較を読み込めませんでした", detail: error, symbol: "exclamationmark.triangle") }
-            else if files.isEmpty { BrowserPlaceholder(title: "この比較に変更ファイルはありません", detail: "マージコミットでは、比較する親コミットを切り替えられます。") }
-            else { FileDiffBrowser(repo: repo, files: files, base: base, target: target, refreshID: refreshID, checked: .constant([])) }
-        }
-        .task(id: [repo.path, base ?? "", target]) {
-            loading = true; error = nil; files = []
+        ChangedFilesView(repo: repo, files: files, base: resolvedBase, target: resolvedTarget, checked: .constant([]))
+            .disabled(loading || error != nil)
+            .overlay {
+                if loading { ProgressView("変更ファイルを読み込み中…") }
+                else if let error { BrowserPlaceholder(title: "比較を読み込めませんでした", detail: error, symbol: "exclamationmark.triangle").background(Color(nsColor: .windowBackgroundColor)) }
+            }
+        .task(id: [repo.path, base ?? "", target, refreshKey]) {
+            loading = true; error = nil
             let repository = repo, from = base, to = target
             do {
-                let result = try await Task.detached(priority: .userInitiated) { try repository.revisionChanges(from: from, to: to) }.value
+                let result = try await Task.detached(priority: .userInitiated) {
+                    let baseID = try from.map { try repository.revision($0) }, targetID = try repository.revision(to)
+                    return (try repository.revisionChanges(from: baseID, to: targetID), baseID, targetID)
+                }.value
                 guard !Task.isCancelled else { return }
-                files = result; refreshID = UUID()
+                files = result.0; resolvedBase = result.1; resolvedTarget = result.2
             } catch { if !Task.isCancelled { self.error = error.localizedDescription } }
             if !Task.isCancelled { loading = false }
         }

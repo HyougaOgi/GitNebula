@@ -138,58 +138,205 @@ final class BrowserTests: XCTestCase {
     }
 
     @MainActor
-    func testDiffAndHistoryScreensRenderSelectableContents() async throws {
-        let original = "struct Orbit {\n    let title = \"Earth\"\n    let speed = 12\n\n    func launch() {\n        print(title)\n    }\n}\n"
+    func testListsNavigateToComparisonAndRestoreTheirNativeViews() async throws {
+        let original = "struct Orbit {\n    let title = \"Earth\"\n    let speed = 12\n}\n"
         try write("Orbit.swift", original); try repo.commit(["Orbit.swift"], "軌道モデルを追加")
         try write("Orbit.swift", original.replacingOccurrences(of: "12", with: "24")); try repo.commit(["Orbit.swift"], "飛行速度を調整")
         try repo.createTag("v1.0", at: "HEAD", message: "")
         try write("Orbit.swift", original.replacingOccurrences(of: "Earth", with: "Mars").replacingOccurrences(of: "12", with: "24"))
         try write("Launch.txt", "Ready for launch\n")
-        let application = NSApplication.shared; application.setActivationPolicy(.regular)
-        let model = Workspace()
+        NSApplication.shared.setActivationPolicy(.regular)
+        let model = Workspace(), navigation = ScreenNavigation()
         model.launch(LaunchRequest(action: .diff, paths: [root.path]))
         try await eventually { !model.busy }
-        XCTAssertFalse(model.failed, model.status)
-        // Select a single tracked file for the initial visual comparison.
-        model.launch(LaunchRequest(action: .diff, paths: [root.appendingPathComponent("Orbit.swift").path]))
-        try await eventually { !model.busy }
-        let view = NSHostingView(rootView: ContentView(model: model))
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1220, height: 860), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        let view = NSHostingView(rootView: ContentView(model: model, navigation: navigation))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1220, height: 820), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.appearance = NSAppearance(named: .darkAqua)
         window.contentView = view; window.makeKeyAndOrderFront(nil)
         defer { window.close() }
         func descendants(_ v: NSView) -> [NSView] { v.subviews.flatMap { [$0] + descendants($0) } }
         func panes() -> DiffPanesView? { descendants(view).compactMap { $0 as? DiffPanesView }.first }
+        func filesTable() -> FileTableView? { descendants(view).compactMap { $0 as? FileTableView }.first }
+        func openRow(_ table: FileTableView, _ row: Int) {
+            table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+            _ = table.target?.perform(table.doubleAction, with: table)
+        }
+        try await eventually { filesTable()?.numberOfRows == 2 }
+        let originalTable = try XCTUnwrap(filesTable())
+        XCTAssertNil(panes(), "A changed-files list must not embed file contents")
+        try capture(view, name: "changes-list")
+        openRow(originalTable, 1)
         try await eventually { panes()?.newText.string.contains("Mars") == true }
+        XCTAssertEqual(navigation.frames.count, 2)
+        XCTAssertNil(filesTable(), "The comparison must contain only a single file")
         XCTAssertTrue(panes()?.oldText.string.contains("Earth") == true)
-        try capture(view, name: "diff")
-        model.selectAction(.log)
+        XCTAssertFalse(panes()?.newText.isEditable ?? true)
+        try capture(view, name: "file-comparison")
+        navigation.back()
+        try await eventually { filesTable() === originalTable }
+        XCTAssertEqual(originalTable.selectedRow, 1)
+        XCTAssertNil(panes())
+
+        navigation.openAction(.commit)
+        try await eventually { navigation.current?.model?.busy == false && filesTable()?.numberOfRows == 2 }
+        let commitModel = try XCTUnwrap(navigation.current?.model)
+        commitModel.selected = ["Orbit.swift"]; commitModel.message = "作業途中のメッセージ"
+        let commitTable = try XCTUnwrap(filesTable())
+        func checks() -> [NSControl.StateValue] {
+            (0..<commitTable.numberOfRows).compactMap { (commitTable.view(atColumn: 0, row: $0, makeIfNecessary: true) as? NSButton)?.state }
+        }
+        try await eventually { checks() == [.off, .on] }
+        commitModel.selected = Set(commitModel.visibleChanges.map(\.path))
+        try await eventually { checks() == [.on, .on] }
+        commitModel.selected = []
+        try await eventually { checks() == [.off, .off] }
+        let checkbox = try XCTUnwrap(commitTable.view(atColumn: 0, row: 1, makeIfNecessary: true) as? NSButton)
+        checkbox.performClick(nil)
+        try await eventually { commitModel.selected == ["Orbit.swift"] && checks() == [.off, .on] }
+        openRow(commitTable, 1)
+        try await eventually { panes() != nil }
+        navigation.back()
+        try await eventually { filesTable() === commitTable }
+        XCTAssertEqual(commitModel.message, "作業途中のメッセージ")
+        XCTAssertEqual(commitModel.selected, ["Orbit.swift"])
+        try capture(view, name: "commit-list")
+        navigation.back()
+
+        navigation.openAction(.log)
+        try await eventually { filesTable()?.numberOfRows == 1 }
+        XCTAssertNil(panes())
+        let historyFrame = try XCTUnwrap(navigation.current)
+        let historyTable = try XCTUnwrap(descendants(view).compactMap { $0 as? NSTableView }.first { $0.tableColumns.count == 4 })
+        XCTAssertEqual(historyTable.numberOfRows, 2)
+        try capture(view, name: "history-list")
+        let historyFiles = try XCTUnwrap(filesTable())
+        openRow(historyFiles, 0)
         try await eventually { panes()?.oldText.string.contains("speed = 12") == true && panes()?.newText.string.contains("speed = 24") == true }
-        let table = try XCTUnwrap(descendants(view).compactMap { $0 as? NSTableView }.first { $0.tableColumns.count == 4 })
-        XCTAssertEqual(table.numberOfRows, 2)
-        try capture(view, name: "log")
-        table.selectRowIndexes(IndexSet(integer: 1), byExtendingSelection: false)
+        navigation.back()
+        try await eventually { filesTable() === historyFiles }
+        XCTAssertTrue(navigation.current === historyFrame)
+        XCTAssertTrue(descendants(view).contains { $0 === historyTable })
+        historyTable.selectRowIndexes(IndexSet(integer: 1), byExtendingSelection: false)
+        try await Task.sleep(nanoseconds: 300_000_000)
+        try await eventually { filesTable()?.numberOfRows == 1 }
+        openRow(try XCTUnwrap(filesTable()), 0)
         try await eventually { panes()?.newText.string.contains("speed = 12") == true }
         XCTAssertFalse(panes()?.oldText.string.contains("struct Orbit") == true)
-        try repo.setRemote("origin", url: "https://example.invalid/space/orbit.git")
-        _ = try repo.run(["update-ref", "refs/remotes/origin/main", "HEAD~1"])
-        let remote = try repo.remoteOverview("origin")
-        XCTAssertEqual(remote.ahead, 1); XCTAssertEqual(remote.behind, 0)
+        navigation.back(); navigation.back()
+
         try repo.saveStash("打ち上げ準備の途中", includeUntracked: true)
-        try repo.applyStash(XCTUnwrap(repo.stashes().first).id)
-        model.apply(try Snapshot(repo))
-        for action in [GitAction.commit, .pull, .switchBranch, .tags, .stash, .remotes, .tools] {
-            model.selectAction(action)
-            try await Task.sleep(nanoseconds: 800_000_000)
-            try await eventually { !model.busy }
-            if [.tags, .tools].contains(action) { try await eventually { panes()?.newText.string.contains("speed = 24") == true } }
-            if action == .stash { try await eventually { panes()?.newText.string.contains("Mars") == true } }
-            if action == .remotes {
-                try await eventually { descendants(view).compactMap { $0 as? NSTextField }.contains { $0.stringValue == "https://example.invalid/space/orbit.git" } }
-            }
-            try capture(view, name: action.rawValue)
+        let stash = try XCTUnwrap(repo.stashes().first)
+        model.refresh(); try await eventually { !model.busy }
+        for (reference, isStash) in [("refs/tags/v1.0", false), (stash.id, true)] {
+            navigation.openRevision(repo, reference: reference, stash: isStash)
+            try await eventually { filesTable()?.numberOfRows == 1 }
+            XCTAssertNil(panes())
+            openRow(try XCTUnwrap(filesTable()), 0)
+            try await eventually { panes() != nil }
+            XCTAssertTrue(panes()?.newText.string.contains(isStash ? "Mars" : "speed = 24") == true)
+            navigation.back(); navigation.back()
         }
+        // Opening management screens never auto-executes an operation or displays comparisons.
+        for action in [GitAction.stash, .tags, .remotes, .tools, .workspace, .pull, .switchBranch] {
+            navigation.openAction(action)
+            try await eventually { navigation.current?.model?.busy == false }
+            try await Task.sleep(nanoseconds: 150_000_000)
+            XCTAssertNil(panes(), action.rawValue)
+            try capture(view, name: action.rawValue)
+            navigation.back()
+        }
+        for page in [UtilityPage.files, .branches, .conflicts, .identity, .tool(.reflog), .tool(.listWorktrees)] {
+            navigation.openUtility(page)
+            try await eventually { navigation.current?.model?.busy == false }
+            XCTAssertNil(panes(), page.title)
+            navigation.back()
+        }
+        XCTAssertTrue(try repo.changes().isEmpty)
     }
+
+    @MainActor
+    func testSearchScrollDraftAndRefreshSurviveNavigation() async throws {
+        try write("tracked.txt", "before\n"); try repo.commit(["tracked.txt"], "base")
+        try write("tracked.txt", "after\n")
+        for i in 0..<100 { try write(String(format: "file-%03d.txt", i), "new \(i)\n") }
+        let model = Workspace(), navigation = ScreenNavigation()
+        model.launch(LaunchRequest(action: .commit, paths: [root.path]))
+        try await eventually { !model.busy }
+        let view = NSHostingView(rootView: ContentView(model: model, navigation: navigation))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1220, height: 820), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = view; window.makeKeyAndOrderFront(nil)
+        defer { window.close() }
+        func descendants(_ v: NSView) -> [NSView] { v.subviews.flatMap { [$0] + descendants($0) } }
+        func table() -> FileTableView? { descendants(view).compactMap { $0 as? FileTableView }.first }
+        try await eventually { table()?.numberOfRows == 101 }
+        let list = try XCTUnwrap(table())
+        let search = try XCTUnwrap(descendants(view).compactMap { $0 as? NSTextField }.first { $0.placeholderString == "ファイルを絞り込み" })
+        XCTAssertTrue(window.makeFirstResponder(search))
+        let editor = try XCTUnwrap(search.currentEditor() as? NSTextView)
+        editor.insertText("file-", replacementRange: editor.selectedRange())
+        try await eventually { list.numberOfRows == 100 }
+        list.selectRowIndexes(IndexSet(integer: 70), byExtendingSelection: false)
+        list.scrollRowToVisible(70)
+        let offset = try XCTUnwrap(list.enclosingScrollView).contentView.bounds.origin
+        XCTAssertGreaterThan(offset.y, 0)
+        model.selected = ["tracked.txt"]; model.message = "preserved draft"
+        _ = list.target?.perform(list.doubleAction, with: list)
+        try await eventually { descendants(view).contains { $0 is DiffPanesView } }
+        navigation.back()
+        try await eventually { table() === list }
+        XCTAssertEqual(list.selectedRow, 70)
+        XCTAssertEqual(search.stringValue, "file-")
+        XCTAssertEqual(list.enclosingScrollView?.contentView.bounds.origin, offset)
+        XCTAssertEqual(model.selected, ["tracked.txt"]); XCTAssertEqual(model.message, "preserved draft")
+        navigation.openUtility(.files)
+        try await eventually { navigation.current?.model?.busy == false }
+        let manager = try XCTUnwrap(navigation.current?.model)
+        manager.operation { try $0.stage(["tracked.txt"]) }
+        try await eventually { !manager.busy }
+        navigation.back()
+        try await eventually { !model.busy && model.changes.contains { $0.path == "tracked.txt" && $0.code == "M " } }
+        XCTAssertTrue(table() === list)
+        XCTAssertEqual(search.stringValue, "file-"); XCTAssertEqual(model.message, "preserved draft")
+        XCTAssertEqual(list.selectedRow, 70)
+        model.commit(); try await eventually { !model.busy }
+        XCTAssertFalse(model.failed, model.status)
+        XCTAssertEqual(try repo.history(limit: 1).first?.subject, "preserved draft")
+        XCTAssertEqual(try repo.changes().count, 100, "Only the checked file must be committed")
+    }
+
+    @MainActor
+    func testComparisonFailureAndRapidBackNeverReplaceTheParentOrAnotherFile() async throws {
+        try write("one.txt", "one before\n"); try write("two.txt", "two before\n")
+        try repo.commit(["one.txt", "two.txt"], "base")
+        try write("one.txt", "one after\n"); try write("two.txt", "two after\n")
+        let model = Workspace(), navigation = ScreenNavigation()
+        model.launch(LaunchRequest(action: .diff, paths: [root.path]))
+        try await eventually { !model.busy }
+        let view = NSHostingView(rootView: ContentView(model: model, navigation: navigation))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1220, height: 820), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = view; window.makeKeyAndOrderFront(nil)
+        defer { window.close() }
+        func descendants(_ v: NSView) -> [NSView] { v.subviews.flatMap { [$0] + descendants($0) } }
+        func panes() -> DiffPanesView? { descendants(view).compactMap { $0 as? DiffPanesView }.first }
+        try await eventually { navigation.frames.count == 1 }
+        let original = try XCTUnwrap(navigation.current)
+        navigation.openComparison(FileComparisonRequest(repo: repo, change: try change("one.txt"), base: "missing-reference", target: nil))
+        try await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertNil(panes())
+        navigation.back()
+        try await eventually { navigation.current === original }
+        navigation.openComparison(FileComparisonRequest(repo: repo, change: try change("one.txt"), base: "HEAD", target: nil))
+        try await Task.sleep(nanoseconds: 30_000_000)
+        navigation.back()
+        navigation.openComparison(FileComparisonRequest(repo: repo, change: try change("two.txt"), base: "HEAD", target: nil))
+        try await eventually { panes()?.newText.string.contains("two after") == true }
+        XCTAssertFalse(panes()?.newText.string.contains("one after") == true)
+        XCTAssertEqual(navigation.frames.count, 2)
+        navigation.back()
+        try await eventually { navigation.current === original && panes() == nil }
+        XCTAssertEqual(Set(try repo.changes().map(\.path)), ["one.txt", "two.txt"])
+    }
+
     @MainActor private func eventually(_ condition: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async throws {
         let deadline = Date().addingTimeInterval(20)
         while !condition() && Date() < deadline { try await Task.sleep(nanoseconds: 50_000_000) }

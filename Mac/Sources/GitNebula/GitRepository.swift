@@ -1,6 +1,6 @@
 import Foundation
 
-struct Change: Identifiable, Sendable {
+struct Change: Identifiable, Sendable, Equatable {
     var id: String { path }
     let code: String
     let path: String

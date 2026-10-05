@@ -7,7 +7,7 @@ enum GitAction: String, CaseIterable, Sendable {
         switch self {
         case .open: return "Git 操作を選択"
         case .commit: return "変更をコミット"
-        case .diff: return "差分を確認"
+        case .diff: return "差分一覧"
         case .log: return "履歴を表示"
         case .pull: return "変更を受信（Pull）"
         case .push: return "変更を送信（Push）"
@@ -18,16 +18,16 @@ enum GitAction: String, CaseIterable, Sendable {
         case .stash: return "変更を退避（Stash）"
         case .tags: return "タグを管理"
         case .remotes: return "リモートを設定"
-        case .tools: return "履歴・ファイル・作業ツリー"
-        case .workspace: return "詳細操作"
+        case .tools: return "その他の機能"
+        case .workspace: return "リポジトリの管理"
         }
     }
     var hint: String {
         switch self {
         case .open: return "Finder の右クリックから、必要な操作を直接開けます。"
         case .commit: return "ファイルを確認して、メッセージを入力するだけ。"
-        case .diff: return "変更前と変更後を左右に並べて比較します。"
-        case .log: return "コミットを選択して、変更ファイルと差分を確認します。"
+        case .diff: return "変更ファイルの一覧です。ファイルを開くと、その差分を表示します。"
+        case .log: return "コミットの一覧・説明・変更ファイルを表示します。"
         case .pull: return "リモートの変更を現在のブランチに取り込みます（fast-forward のみ）。"
         case .push: return "現在のブランチのコミットをリモートに送信します。"
         case .fetch: return "リモートの最新情報を取得します。作業ファイルは変更しません。"
@@ -37,8 +37,8 @@ enum GitAction: String, CaseIterable, Sendable {
         case .stash: return "変更を一時保存し、後で作業ツリーに戻します。"
         case .tags: return "リリースなどの目印をコミットに付けます。"
         case .remotes: return "取得・送信先の URL を登録・変更します。"
-        case .tools: return "履歴編集、Blame、ステージ、パッチ、Worktree、Submodule。"
-        case .workspace: return "ブランチ管理とマージの操作。"
+        case .tools: return "履歴・ファイルの確認、履歴編集、パッチ、Worktree、Submodule の専用画面を開きます。"
+        case .workspace: return "作業ファイル・ブランチ・競合解決・設定の画面を開きます。"
         }
     }
     var symbol: String {

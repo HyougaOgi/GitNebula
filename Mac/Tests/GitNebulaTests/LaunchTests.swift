@@ -35,6 +35,23 @@ final class LaunchTests: XCTestCase {
         }
     }
     @MainActor
+    func testFinderCannotReplaceCloneOrInitDraftsInTheLauncher() {
+        let model = Workspace(), navigation = ScreenNavigation()
+        navigation.installRoot(model, close: nil)
+        XCTAssertTrue(navigation.canReuseLauncher(model))
+        navigation.openAction(.clone)
+        let clone = navigation.current?.model
+        clone?.cloneSource = "https://example.invalid/work/repo.git"
+        XCTAssertFalse(navigation.canReuseLauncher(model))
+        XCTAssertEqual(clone?.cloneSource, "https://example.invalid/work/repo.git")
+        navigation.back()
+        XCTAssertTrue(navigation.canReuseLauncher(model))
+        navigation.openAction(.initialize)
+        navigation.current?.model?.repositoryPath = "/tmp/work in progress"
+        XCTAssertFalse(navigation.canReuseLauncher(model))
+    }
+
+    @MainActor
     func testRepositoryPathFieldAcceptsTypingAndCanRecoverAfterInvalidPath() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("typed repo 星 " + UUID().uuidString).resolvingSymlinksInPath()
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

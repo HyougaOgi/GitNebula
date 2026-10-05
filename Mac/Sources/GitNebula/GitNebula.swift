@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import Foundation
+import Combine
 
 struct Snapshot: Sendable {
     let repo: GitRepository
@@ -24,6 +25,36 @@ struct Snapshot: Sendable {
 
 @MainActor
 final class Workspace: ObservableObject {
+    @Published var launchID = UUID()
+    var isScreenActive = true
+    private var needsRefresh = false
+    private let instanceID = UUID()
+    private var changeObserver: AnyCancellable?
+    static let repositoryChanged = Notification.Name("GitNebula.repositoryChanged")
+    init() {
+        changeObserver = NotificationCenter.default.publisher(for: Self.repositoryChanged).receive(on: RunLoop.main).sink { [weak self] note in
+            guard let self, let path = note.userInfo?["path"] as? String,
+                  path == self.repository?.path, note.userInfo?["source"] as? UUID != self.instanceID else { return }
+            self.needsRefresh = true
+            if self.isScreenActive { self.refreshIfNeeded() }
+        }
+    }
+    func notifyRepositoryChanged() {
+        guard let path = repository?.path else { return }
+        NotificationCenter.default.post(name: Self.repositoryChanged, object: nil, userInfo: ["path": path, "source": instanceID])
+    }
+    func refreshIfNeeded() {
+        guard needsRefresh, !busy else { return }
+        needsRefresh = false; refresh()
+    }
+    func refresh() {
+        guard let repo = repository else { return }
+        perform({ try Snapshot(repo) }, apply: apply)
+    }
+    func request(for action: GitAction) -> LaunchRequest {
+        let paths = request.paths.isEmpty ? repository.map { [$0.path] } ?? [] : request.paths
+        return LaunchRequest(action: action, paths: paths)
+    }
     @Published var repository: GitRepository?
     @Published var action = GitAction.open
     @Published var changes: [Change] = []
@@ -63,23 +94,26 @@ final class Workspace: ObservableObject {
         selected = initialSelection ? available : selected.intersection(available)
         initialSelection = false
     }
-    func perform<T: Sendable>(_ work: @escaping @Sendable () throws -> T, success: String = "準備完了", apply: @escaping (T) -> Void) {
+    func perform<T: Sendable>(_ work: @escaping @Sendable () throws -> T, success: String = "準備完了", notifiesChanges: Bool = false, apply: @escaping (T) -> Void) {
         guard !busy else { return }; busy = true; succeeded = false; failed = false; status = "処理中…"
         Task {
             do {
                 let result = try await Task.detached(priority: .userInitiated) { try work() }.value
                 apply(result); status = success; succeeded = success != "準備完了"
+                if notifiesChanges { notifyRepositoryChanged() }
             } catch {
                 let message = error.localizedDescription
                 if let repo = repository, let state = try? await Task.detached(operation: { try Snapshot(repo) }).value { self.apply(state) }
                 status = message; failed = true
+                if notifiesChanges { notifyRepositoryChanged() }
             }
             busy = false
+            if isScreenActive { refreshIfNeeded() }
         }
     }
     func launch(_ newRequest: LaunchRequest) {
         guard !busy else { return }
-        request = newRequest; action = request.action; initialSelection = true
+        launchID = UUID(); request = newRequest; action = request.action; initialSelection = true
         repository = nil; changes = []; selected = []; conflicts = []; merging = false; chosenRemote = ""; chosenBranch = ""
         sequence = nil
         message = ""; status = "準備完了"; succeeded = false; failed = false
@@ -130,12 +164,14 @@ final class Workspace: ObservableObject {
     }
     func operation(success: String = "完了しました。", _ work: @escaping @Sendable (GitRepository) throws -> Void) {
         guard let repo = repository else { return }
-        perform({ try work(repo); return try Snapshot(repo) }, success: success, apply: apply)
+        perform({ try work(repo); return try Snapshot(repo) }, success: success, notifiesChanges: true) { state in
+            self.apply(state)
+        }
     }
     func commit() {
         let paths = Array(selected.intersection(Set(visibleChanges.map(\.path)))), text = message
         guard let repo = repository else { return }
-        perform({ try repo.commit(paths, text); return try Snapshot(repo) }, success: "コミットしました。閉じて作業に戻れます。") {
+        perform({ try repo.commit(paths, text); return try Snapshot(repo) }, success: "コミットしました。閉じて作業に戻れます。", notifiesChanges: true) {
             self.apply($0); self.message = ""
         }
     }
@@ -177,17 +213,19 @@ struct NebulaBackground: View {
 }
 
 @MainActor
-struct ContentView: View {
+struct OperationScreen: View {
     @ObservedObject var model: Workspace
+    var page: UtilityPage? = nil
     var closeWindow: (() -> Void)? = nil
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.screenActions) private var navigation
     @State private var showEditor = false
     @State private var editPath = ""
     @State private var resolution = ""
     private let accent = Color(red: 0.70, green: 0.62, blue: 1)
     private var remoteAction: Bool { [.pull, .push, .fetch].contains(model.action) }
-    private var filesAction: Bool { [.commit, .diff, .workspace].contains(model.action) }
-    private var wideAction: Bool { filesAction || [.log, .stash, .tags, .tools].contains(model.action) }
+    private var filesAction: Bool { page == .files || page == nil && [.commit, .diff].contains(model.action) }
+    private var title: String { page?.title ?? model.action.title }
+    private var hint: String { page?.hint ?? model.action.hint }
     func prompt(_ title: String, _ labels: [String], done: ([String]) -> Void) {
         let alert = NSAlert(); alert.messageText = title
         alert.addButton(withTitle: "実行"); alert.addButton(withTitle: "キャンセル")
@@ -208,9 +246,13 @@ struct ContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top) {
+                if navigation.canGoBack {
+                    Button(action: navigation.back) { Label("戻る", systemImage: "chevron.left") }
+                        .keyboardShortcut("[", modifiers: .command).accessibilityIdentifier("navigateBack")
+                }
                 VStack(alignment: .leading, spacing: 5) {
-                    Label(model.action.title, systemImage: model.action.symbol).font(.title2.bold())
-                    Text(model.action.hint).font(.callout).foregroundStyle(.secondary)
+                    Label(title, systemImage: model.action.symbol).font(.title2.bold())
+                    Text(hint).font(.callout).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Label("GitNebula", systemImage: "sparkles").font(.caption.bold()).foregroundStyle(accent)
@@ -222,7 +264,7 @@ struct ContentView: View {
                     Label(model.branch, systemImage: "arrow.triangle.branch").foregroundStyle(accent)
                     Text(repo.path).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle).help(repo.path)
                     Spacer()
-                    Button("更新") { model.operation(success: "準備完了") { _ in } }
+                    Button("更新", action: model.refresh)
                 }.padding(10).background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
             }
             if model.action == .clone { cloneForm }
@@ -238,43 +280,53 @@ struct ContentView: View {
                     Button("フォルダを選択", action: model.chooseRepository).buttonStyle(.borderedProminent)
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                if remoteAction { ScrollView { RemoteOperationView(model: model) } }
-                if model.action == .switchBranch { BranchSelectionView(model: model) }
-                if model.action == .workspace { branchForm }
-                if filesAction { filePanel }
-                if model.action == .log, let repo = model.repository { HistoryBrowserView(repo: repo, branches: model.branches, refreshID: model.revisionID) }
-                if [.stash, .tags, .remotes, .tools].contains(model.action) { RepositoryToolsView(model: model).id(model.action) }
-                if model.sequence != nil || !model.conflicts.isEmpty { conflictForm }
-                if model.action == .commit || model.action == .workspace {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("コミットメッセージ").font(.headline)
-                        TextField("変更内容を短く説明してください", text: $model.message).textFieldStyle(.roundedBorder)
-                        HStack {
-                            Text("\(model.selected.count) ファイルを選択").foregroundStyle(.secondary)
-                            Spacer()
-                            Button("コミット", action: model.commit).buttonStyle(.borderedProminent).keyboardShortcut(.return, modifiers: .command)
-                                .disabled(model.selected.isEmpty || model.message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.sequence != nil)
+                if let page {
+                    switch page {
+                    case .files: filePanel
+                    case .branches: branchForm
+                    case .conflicts: conflictForm
+                    case .identity: IdentitySettingsView(model: model)
+                    case .tool(let tool): RepositoryToolsView(model: model, tool: tool)
+                    }
+                } else {
+                    if remoteAction { ScrollView { RemoteOperationView(model: model) } }
+                    if model.action == .switchBranch { BranchSelectionView(model: model) }
+                    if filesAction { filePanel }
+                    if model.action == .log, let repo = model.repository { HistoryBrowserView(repo: repo, branches: model.branches, refreshID: model.revisionID) }
+                    if [.stash, .tags, .remotes].contains(model.action) { RepositoryToolsView(model: model).id(model.action) }
+                    if model.action == .tools || model.action == .workspace { FunctionLauncher(management: model.action == .workspace) }
+                    if model.action == .commit {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("コミットメッセージ").font(.headline)
+                            TextField("変更内容を短く説明してください", text: $model.message).textFieldStyle(.roundedBorder).accessibilityIdentifier("commitMessage")
+                            HStack {
+                                Text("\(model.selected.count) ファイルを選択").foregroundStyle(.secondary)
+                                Spacer()
+                                Button("コミット", action: model.commit).buttonStyle(.borderedProminent).keyboardShortcut(.return, modifiers: .command)
+                                    .disabled(model.selected.isEmpty || model.message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.sequence != nil)
+                            }
                         }
                     }
                 }
+                if page != .conflicts && (model.sequence != nil || !model.conflicts.isEmpty) {
+                    HStack {
+                        Text("競合または進行中の Git 操作があります。").foregroundStyle(.orange)
+                        Button("競合の解決を開く") { navigation.openUtility(.conflicts) }
+                    }
+                }
             }
-            if !wideAction && model.action != .open { Spacer(minLength: 0) }
+            if [.clone, .initialize].contains(model.action) || page == .branches || page == .conflicts { Spacer(minLength: 0) }
             Divider()
             HStack(alignment: .top) {
                 if model.busy { ProgressView().controlSize(.small) }
                 else { Image(systemName: model.failed ? "exclamationmark.circle" : model.succeeded ? "checkmark.circle.fill" : "sparkle").foregroundStyle(model.failed ? .orange : accent) }
                 ScrollView { Text(model.status).font(.callout).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }.frame(maxHeight: model.failed ? 90 : 38)
-                Menu("その他の操作") {
-                    ForEach(GitAction.allCases.filter { $0 != model.action }, id: \.self) { action in
-                        Button(action.title) { model.selectAction(action) }
-                    }
-                    Divider(); Button("別のリポジトリを選択", action: model.chooseRepository)
-                }.fixedSize()
-                Button("閉じる") { if let closeWindow { closeWindow() } else { dismiss() } }.keyboardShortcut(.cancelAction)
+                Button("閉じる") { navigation.close() }.keyboardShortcut(.cancelAction)
             }
         }
-        .navigationTitle(model.action.title + " — GitNebula")
-        .padding(16).frame(minWidth: wideAction ? 1050 : 720, idealWidth: wideAction ? 1220 : 780, minHeight: wideAction ? 680 : remoteAction ? 640 : 520)
+        .navigationTitle(title + " — GitNebula")
+        .padding(16).frame(minWidth: 1050, idealWidth: 1220, minHeight: 680)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(NebulaBackground()).foregroundStyle(Color(red: 0.91, green: 0.92, blue: 0.98)).disabled(model.busy).tint(accent).environment(\.colorScheme, .dark).preferredColorScheme(.dark)
         .sheet(isPresented: $showEditor) {
             VStack {
@@ -292,8 +344,8 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 16) {
             FinderIntegrationView()
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                ForEach(GitAction.allCases.filter { $0 != .open && $0 != .workspace }, id: \.self) { action in
-                    Button { model.selectAction(action) } label: {
+                ForEach(GitAction.allCases.filter { $0 != .open }, id: \.self) { action in
+                    Button { navigation.openAction(action) } label: {
                         Label(action.title, systemImage: action.symbol).frame(maxWidth: .infinity, alignment: .leading).padding(12)
                     }.buttonStyle(.bordered).disabled(model.repository == nil && ![.clone, .initialize].contains(action))
                 }
@@ -328,7 +380,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 12) {
             Picker("切り替え先", selection: $model.chosenBranch) { ForEach(model.branches, id: \.self) { Text($0 == model.branch ? "\($0)（現在）" : $0).tag($0) } }
             Button("切り替え") { let name = model.chosenBranch; model.operation { try $0.switchBranch(name) } }.disabled(model.chosenBranch.isEmpty || model.chosenBranch == model.branch)
-            if model.action == .workspace {
+            if page == .branches {
                 HStack {
                     Button("ブランチ作成") { prompt("ブランチを作成して切替", ["名前"]) { values in model.operation { try $0.createBranch(values[0]) } } }
                     Button("名前変更") { let old = model.chosenBranch; prompt("ブランチ名を変更", ["新しい名前"]) { values in model.operation { try $0.renameBranch(old, values[0]) } } }
@@ -343,12 +395,12 @@ struct ContentView: View {
             HStack {
                 Text("対象の変更  ·  \(model.visibleChanges.count) ファイル").font(.headline)
                 Spacer()
-                if model.action != .diff {
+                if model.action == .commit || page == .files {
                     Button("すべて選択") { model.selected = Set(model.visibleChanges.map(\.path)) }
                     Button("選択解除") { model.selected.removeAll() }
                 }
             }
-            if model.action != .diff {
+            if page == .files {
                 HStack {
                     Button("ステージ") { let files = Array(model.selected); model.operation { try $0.stage(files) } }
                     Button("ステージ解除") { let files = Array(model.selected); model.operation { try $0.unstage(files) } }
@@ -360,15 +412,18 @@ struct ContentView: View {
                 }.disabled(model.selected.isEmpty || model.sequence != nil)
             }
             if let repo = model.repository {
-                FileDiffBrowser(repo: repo, files: model.visibleChanges, refreshID: model.revisionID,
-                                allowsChecking: model.action != .diff, checked: $model.selected)
+                ChangedFilesView(repo: repo, files: model.visibleChanges,
+                                 allowsChecking: model.action == .commit || page == .files, checked: $model.selected)
                     .frame(minHeight: 260, maxHeight: .infinity)
             }
         }.frame(maxHeight: .infinity).layoutPriority(1)
     }
     private var conflictForm: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(model.conflicts.isEmpty ? "競合はありません。\(model.sequence?.title ?? "操作") を完了してください。" : "競合があります。内容を確認して解決してください。").foregroundStyle(.orange)
+            if model.sequence != nil || !model.conflicts.isEmpty {
+                Text(model.conflicts.isEmpty ? "競合はありません。\(model.sequence?.title ?? "操作") を完了してください。" : "競合があります。内容を確認して解決してください。").foregroundStyle(.orange)
+            }
+            if model.conflicts.isEmpty && model.sequence == nil { Text("解決が必要な競合や進行中の操作はありません。") }
             if !model.conflicts.isEmpty {
                 Picker("競合", selection: $model.chosenConflict) { ForEach(model.conflicts, id: \.self) { Text($0).tag($0) } }
                 HStack {
@@ -400,16 +455,16 @@ struct ContentView: View {
 @MainActor
 final class ActionWindows: NSObject, NSWindowDelegate {
     static let shared = ActionWindows()
-    private var windows: [ObjectIdentifier: (NSWindowController, Workspace)] = [:]
+    private var windows: [ObjectIdentifier: (NSWindowController, ScreenNavigation)] = [:]
     func open(_ request: LaunchRequest) {
         let model = Workspace()
-        let large = [GitAction.commit, .diff, .log, .workspace, .stash, .tags, .tools].contains(request.action)
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: large ? 1220 : 780, height: large ? 820 : [.pull, .push, .fetch].contains(request.action) ? 700 : 580), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        let navigation = ScreenNavigation()
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1220, height: 820), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = request.action.title + " — GitNebula"; window.appearance = NSAppearance(named: .darkAqua)
         window.isReleasedWhenClosed = false; window.delegate = self
-        window.contentView = NSHostingView(rootView: ContentView(model: model, closeWindow: { [weak window] in window?.performClose(nil) }))
+        window.contentView = NSHostingView(rootView: ContentView(model: model, closeWindow: { [weak window] in window?.performClose(nil) }, navigation: navigation))
         let controller = NSWindowController(window: window)
-        windows[ObjectIdentifier(window)] = (controller, model)
+        windows[ObjectIdentifier(window)] = (controller, navigation)
         model.launch(request); window.center(); controller.showWindow(nil); window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -423,10 +478,11 @@ final class ActionWindows: NSObject, NSWindowDelegate {
 struct GitNebulaApp: App {
     @NSApplicationDelegateAdaptor(ApplicationDelegate.self) private var appDelegate
     @StateObject private var model = Workspace()
+    @StateObject private var navigation = ScreenNavigation()
     @State private var handledArguments = false
     var body: some Scene {
         WindowGroup {
-            ContentView(model: model)
+            ContentView(model: model, navigation: navigation)
                 // Route Finder URLs through the existing scene. Without this,
                 // SwiftUI creates an extra copy of the shared workspace window.
                 .handlesExternalEvents(preferring: ["gitnebula://"], allowing: ["gitnebula://"])
@@ -434,7 +490,7 @@ struct GitNebulaApp: App {
                     do {
                         let request = try LaunchRequest.parse(url)
                         handledArguments = true
-                        if model.repository == nil && model.action == .open && !model.busy { model.launch(request) }
+                        if navigation.canReuseLauncher(model) { model.launch(request) }
                         else { ActionWindows.shared.open(request) }
                     }
                     catch { model.status = error.localizedDescription; model.failed = true }
@@ -447,7 +503,7 @@ struct GitNebulaApp: App {
         }.windowStyle(.titleBar).defaultSize(width: 1220, height: 820)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("リポジトリを開く…", action: model.chooseRepository).keyboardShortcut("o")
+                Button("リポジトリを開く…") { ActionWindows.shared.open(LaunchRequest(action: .open, paths: [])) }.keyboardShortcut("o")
                 Button("新しい操作ウィンドウ") { ActionWindows.shared.open(LaunchRequest(action: .open, paths: [])) }.keyboardShortcut("n")
             }
         }

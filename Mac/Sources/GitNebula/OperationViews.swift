@@ -37,6 +37,7 @@ extension GitRepository {
 
 @MainActor
 struct RemoteOperationView: View {
+    @Environment(\.screenActions) private var navigation
     @ObservedObject var model: Workspace
     @State private var overview: RemoteOverview?
     @State private var error: String?
@@ -64,7 +65,7 @@ struct RemoteOperationView: View {
                     Button(model.action.title, action: model.runAction).buttonStyle(.borderedProminent).controlSize(.large).disabled(model.succeeded)
                 }
             }
-            Button("リモートを設定") { model.selectAction(.remotes) }
+            Button("リモートを設定") { navigation.openAction(.remotes) }
         }.padding(20).background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
         .task(id: [model.repository?.path ?? "", model.chosenRemote, model.revisionID.uuidString]) {
             overview = nil; error = nil
@@ -121,15 +122,16 @@ struct BranchSelectionView: View {
 struct CommitReferenceView: View {
     let repo: GitRepository
     let reference: String
+    var refreshKey = ""
     @State private var commit: CommitRecord?
     @State private var error: String?
     var body: some View {
         Group {
-            if let commit { CommitInspector(repo: repo, commit: commit) }
+            if let commit { CommitInspector(repo: repo, commit: commit).id(commit.id) }
             else if let error { BrowserPlaceholder(title: "コミットを読み込めませんでした", detail: error) }
             else { ProgressView("コミットを読み込み中…").frame(maxWidth: .infinity, maxHeight: .infinity) }
-        }.task(id: [repo.path, reference]) {
-            commit = nil; error = nil
+        }.task(id: [repo.path, reference, refreshKey]) {
+            error = nil
             do {
                 let repository = repo, ref = reference
                 let result = try await Task.detached { try repository.history(reference: ref, limit: 1).first }.value
@@ -156,7 +158,7 @@ struct StashComparisonView: View {
                         Picker("対象", selection: $untracked) { Text("追跡ファイル").tag(false); Text("未追跡ファイル").tag(true) }.pickerStyle(.segmented).frame(width: 230)
                     }
                 }.padding(10)
-                RevisionDiffBrowser(repo: repo, base: untracked ? nil : commit.parents.first, target: untracked && commit.parents.count > 2 ? commit.parents[2] : commit.id)
+                RevisionFilesView(repo: repo, base: untracked ? nil : commit.parents.first, target: untracked && commit.parents.count > 2 ? commit.parents[2] : commit.id)
             } else if let error { BrowserPlaceholder(title: "退避内容を読み込めませんでした", detail: error) }
             else { ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity) }
         }.task(id: reference) {
