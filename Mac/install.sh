@@ -35,6 +35,9 @@ ditto "$stage/GitNebula.app" "$app"
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$app"
 pluginkit -a "$app/Contents/PlugIns/GitNebulaFinder.appex"
 pluginkit -e use -i dev.gitnebula.desktop.finder
+# Finder keeps the previous extension executable running across replacements.
+# Restart only our extension so the next menu uses the newly installed code.
+pkill -u "$(id -u)" -x GitNebulaFinder || true
 echo "Installed $app"
 pluginkit -m -v -i dev.gitnebula.desktop.finder
 echo 'If the Finder menu is hidden, open GitNebula → Finder 拡張の設定を開く and enable GitNebula Finder.'

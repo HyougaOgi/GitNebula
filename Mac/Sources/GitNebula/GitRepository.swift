@@ -18,6 +18,9 @@ struct Change: Identifiable, Sendable {
 struct GitRepository: Sendable {
     let path: String
     func run(_ args: [String]) throws -> String {
+        String(decoding: try runData(args), as: UTF8.self)
+    }
+    func runData(_ args: [String], accepting statuses: Set<Int32> = [0]) throws -> Data {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
         process.arguments = ["-C", path] + args
@@ -38,11 +41,11 @@ struct GitRepository: Sendable {
         defer { try? stdout.close(); try? stderr.close() }
         process.standardOutput = stdout; process.standardError = stderr
         try process.run(); process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
+        guard statuses.contains(process.terminationStatus) else {
             let details = String(decoding: try Data(contentsOf: output), as: UTF8.self) + String(decoding: try Data(contentsOf: error), as: UTF8.self)
             throw NSError(domain: "GitNebula", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: details.isEmpty ? "Git が終了コード \(process.terminationStatus) で失敗しました。" : details])
         }
-        return String(decoding: try Data(contentsOf: output), as: UTF8.self)
+        return try Data(contentsOf: output)
     }
     func changes() throws -> [Change] {
         let entries = try run(["status", "--porcelain=v1", "-z", "--untracked-files=all"]).split(separator: "\0", omittingEmptySubsequences: false)

@@ -86,7 +86,7 @@ final class LaunchTests: XCTestCase {
         XCTAssertEqual(model.action, .commit)
         XCTAssertEqual(model.selected, ["orbit.txt"])
         XCTAssertEqual(model.visibleChanges.map(\.path), ["orbit.txt"])
-        XCTAssertTrue(model.diff.contains("+new orbit"))
+        XCTAssertEqual(try repo.comparison(XCTUnwrap(model.visibleChanges.first), from: "HEAD").rows.first?.newText, "new orbit")
         model.selectAction(.workspace)
         XCTAssertEqual(Set(model.visibleChanges.map(\.path)), ["orbit.txt", "other.txt"])
         model.selected = Set(model.visibleChanges.map(\.path))

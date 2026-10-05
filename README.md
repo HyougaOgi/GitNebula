@@ -26,7 +26,7 @@ Right-click a file or folder, choose **GitNebula → Commit / Diff / Log / Pull 
 
 GitNebula is in active development. Native build and integration-test commands are included for every platform. Release signing requires the maintainer's own signing identity; unsigned development packages are not notarized or trusted release artifacts.
 
-macOS additionally supports Init, Stash, Tag management, remote/identity settings, staging, ignore rules, history editing, Blame, patches, Worktree, and Submodule operations. See the [feature matrix and remaining TortoiseGit differences](shared/FEATURES.md) for exact platform coverage.
+macOS includes a side-by-side diff viewer with line numbers, aligned changes and synchronized scrolling, plus a searchable commit table with file-level comparisons. Stash and Tag windows also preview changes, and branch/remote operations have dedicated forms and lists. It additionally supports Init, remote/identity settings, staging, ignore rules, history editing, Blame, patches, Worktree, and Submodule operations. See the [feature matrix and remaining TortoiseGit differences](shared/FEATURES.md) for exact platform coverage.
 
 ## Getting started
 

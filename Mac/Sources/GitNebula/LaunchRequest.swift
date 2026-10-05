@@ -26,8 +26,8 @@ enum GitAction: String, CaseIterable, Sendable {
         switch self {
         case .open: return "Finder の右クリックから、必要な操作を直接開けます。"
         case .commit: return "ファイルを確認して、メッセージを入力するだけ。"
-        case .diff: return "ファイルを選ぶと変更内容が表示されます。"
-        case .log: return "コミット・ブランチ・タグの履歴を確認できます。"
+        case .diff: return "変更前と変更後を左右に並べて比較します。"
+        case .log: return "コミットを選択して、変更ファイルと差分を確認します。"
         case .pull: return "リモートの変更を現在のブランチに取り込みます（fast-forward のみ）。"
         case .push: return "現在のブランチのコミットをリモートに送信します。"
         case .fetch: return "リモートの最新情報を取得します。作業ファイルは変更しません。"
@@ -64,6 +64,15 @@ enum GitAction: String, CaseIterable, Sendable {
 struct LaunchRequest: Sendable {
     let action: GitAction
     let paths: [String]
+
+    func url() throws -> URL {
+        var components = URLComponents()
+        components.scheme = "gitnebula"
+        components.host = action.rawValue
+        components.queryItems = paths.map { URLQueryItem(name: "path", value: $0) }
+        guard !paths.isEmpty, let url = components.url else { throw Self.invalid() }
+        return url
+    }
 
     static func parse(_ arguments: [String]) throws -> LaunchRequest {
         var action = GitAction.open, paths: [String] = [], index = 0
