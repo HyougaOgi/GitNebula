@@ -8,6 +8,7 @@ namespace GitNebula;
 
 public partial class App : Application
 {
+    public void RefreshTrayLabels() { if (tray?.ContextMenuStrip is { } menu) { menu.Items[0].Text = Localization.Text("GitNebula を開く"); menu.Items[1].Text = Localization.Text("詳細設定…"); if (menu.Items[2] is Forms.ToolStripMenuItem options) { options.Text = Localization.Text("起動オプション"); options.DropDownItems[0].Text = Localization.Text("ログイン時に自動起動"); options.DropDownItems[1].Text = Localization.Text("起動時にアプリ画面を開く"); } menu.Items[menu.Items.Count - 1].Text = Localization.Text("GitNebula を終了"); } }
     public bool ResidentEnabled { get; set; } = true;
     public bool IsExiting { get; private set; }
     private Forms.NotifyIcon? tray;
@@ -26,15 +27,29 @@ public partial class App : Application
         catch (Exception error) { MessageBox.Show(error.Message, "GitNebula", MessageBoxButton.OK, MessageBoxImage.Error); initialRequest = new("open", []); }
         var window = new MainWindow(initialRequest); MainWindow = window;
         var menu = new Forms.ContextMenuStrip();
-        menu.Items.Add("GitNebula を開く", null, (_, _) => Dispatcher.Invoke(window.ShowHome));
-        menu.Items.Add("詳細設定…", null, (_, _) => Dispatcher.InvokeAsync(() => window.ShowRequest(new LaunchRequest("settings", []))));
+        menu.Items.Add(Localization.Text("GitNebula を開く"), null, (_, _) => Dispatcher.Invoke(window.ShowHome));
+        menu.Items.Add(Localization.Text("詳細設定…"), null, (_, _) => Dispatcher.InvokeAsync(() => window.ShowRequest(new LaunchRequest("settings", []))));
+        var options = new Forms.ToolStripMenuItem(Localization.Text("起動オプション"));
+        var login = new Forms.ToolStripMenuItem(Localization.Text("ログイン時に自動起動")) { Checked = StartupEnabled(), CheckOnClick = true };
+        login.Click += (_, _) => { try { SetStartup(login.Checked); } catch (Exception error) { login.Checked = StartupEnabled(); MessageBox.Show(error.Message, "GitNebula"); } };
+        var home = new Forms.ToolStripMenuItem(Localization.Text("起動時にアプリ画面を開く")) { Checked = AppSettings.Current.ShowHomeOnLaunch, CheckOnClick = true };
+        home.Click += (_, _) => { AppSettings.Current.ShowHomeOnLaunch = home.Checked; AppSettings.Current.Save(); };
+        options.DropDownItems.Add(login); options.DropDownItems.Add(home); menu.Items.Add(options);
         menu.Items.Add(new Forms.ToolStripSeparator());
-        menu.Items.Add("GitNebula を終了", null, (_, _) => Dispatcher.Invoke(Quit));
+        menu.Items.Add(Localization.Text("GitNebula を終了"), null, (_, _) => Dispatcher.Invoke(Quit));
         tray = new Forms.NotifyIcon { Icon = System.Drawing.SystemIcons.Application, Text = "GitNebula", ContextMenuStrip = menu, Visible = true };
         tray.MouseClick += (_, click) => { if (click.Button == Forms.MouseButtons.Left) Dispatcher.Invoke(window.ShowHome); };
-        window.Show();
+        if (initialRequest.Action != "open" || initialRequest.Paths.Length > 0 || AppSettings.Current.ShowHomeOnLaunch) window.Show();
         _ = Listen(window);
         base.OnStartup(e);
+    }
+    private static bool StartupEnabled() {
+        using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run");
+        return key?.GetValue("GitNebula") is string value && value == "\"" + Environment.ProcessPath + "\"";
+    }
+    private static void SetStartup(bool enabled) {
+        using var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run");
+        if (enabled) key.SetValue("GitNebula", "\"" + Environment.ProcessPath + "\""); else key.DeleteValue("GitNebula", false);
     }
     private async Task Forward(string[] arguments)
     {
@@ -43,7 +58,7 @@ public partial class App : Application
             await pipe.ConnectAsync(5000);
             using var writer = new StreamWriter(pipe);
             await writer.WriteLineAsync(JsonSerializer.Serialize(LaunchRequest.Parse(arguments))); await writer.FlushAsync();
-        } catch (Exception error) { MessageBox.Show("起動中の GitNebula に要求を渡せませんでした。\n" + error.Message, "GitNebula", MessageBoxButton.OK, MessageBoxImage.Error); }
+        } catch (Exception error) { MessageBox.Show(Localization.Text("起動中の GitNebula に要求を渡せませんでした。\n") + error.Message, "GitNebula", MessageBoxButton.OK, MessageBoxImage.Error); }
         finally { Shutdown(); }
     }
     private async Task Listen(MainWindow window)
@@ -54,8 +69,8 @@ public partial class App : Application
                 await pipe.WaitForConnectionAsync(stopping.Token);
                 using var reader = new StreamReader(pipe);
                 var json = await reader.ReadLineAsync(stopping.Token);
-                var request = JsonSerializer.Deserialize<LaunchRequest>(json ?? "") ?? throw new ArgumentException("起動要求が空です。");
-                if (!LaunchRequest.Actions.ContainsKey(request.Action)) throw new ArgumentException("不明な操作です。");
+                var request = JsonSerializer.Deserialize<LaunchRequest>(json ?? "") ?? throw new ArgumentException(Localization.Text("起動要求が空です。"));
+                if (!LaunchRequest.Actions.ContainsKey(request.Action)) throw new ArgumentException(Localization.Text("不明な操作です。"));
                 while (window.IsBusy) await Task.Delay(100, stopping.Token);
                 await window.ShowRequest(request);
             } catch (OperationCanceledException) { break; }
@@ -65,7 +80,7 @@ public partial class App : Application
     public void Quit()
     {
         if (IsExiting) return;
-        if (MainWindow is MainWindow window && window.IsBusy) { MessageBox.Show("Git の処理が完了してから終了してください。", "GitNebula"); return; }
+        if (MainWindow is MainWindow window && window.IsBusy) { MessageBox.Show(Localization.Text("Git の処理が完了してから終了してください。"), "GitNebula"); return; }
         IsExiting = true; stopping.Cancel(); if (tray != null) tray.Visible = false;
         Shutdown();
     }

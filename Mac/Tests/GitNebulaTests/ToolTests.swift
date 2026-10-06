@@ -1,17 +1,19 @@
 import XCTest
 @testable import GitNebula
 
-final class ToolTests: XCTestCase {
+final class ToolTests: LocalizedTestCase {
     var root: URL!
     var repo: GitRepository!
     override func setUpWithError() throws {
+        try super.setUpWithError()
         root = FileManager.default.temporaryDirectory.appendingPathComponent("nebula tools 星 " + UUID().uuidString).resolvingSymlinksInPath()
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         repo = try GitRepository.initialize(root.path)
         try repo.setIdentity(name: "Test", email: "test@example.invalid")
         try write("orbit.txt", "base\n"); try repo.commit(["orbit.txt"], "initial")
     }
-    override func tearDownWithError() throws { try FileManager.default.removeItem(at: root) }
+    override func tearDownWithError() throws {
+        try super.tearDownWithError(); try FileManager.default.removeItem(at: root) }
     func write(_ name: String, _ text: String) throws { try text.write(to: root.appendingPathComponent(name), atomically: true, encoding: .utf8) }
 
     func testInitAndRemoteSettings() throws {

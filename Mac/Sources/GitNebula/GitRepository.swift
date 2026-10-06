@@ -6,12 +6,12 @@ struct Change: Identifiable, Sendable, Equatable {
     let path: String
     let original: String?
     var label: String {
-        if ["DD", "AU", "UD", "UA", "DU", "AA", "UU"].contains(code) { return "競合" }
-        if code == "??" { return "新規" }
-        if code.contains("R") { return "名前変更" }
-        if code.contains("D") { return "削除" }
-        if code.contains("A") { return "追加" }
-        return "変更"
+        if ["DD", "AU", "UD", "UA", "DU", "AA", "UU"].contains(code) { return L("競合") }
+        if code == "??" { return L("新規") }
+        if code.contains("R") { return L("名前変更") }
+        if code.contains("D") { return L("削除") }
+        if code.contains("A") { return L("追加") }
+        return L("変更")
     }
 }
 
@@ -51,24 +51,24 @@ struct GitRepository: Sendable {
     }
     func diff(_ file: String) throws -> String {
         let changes = try changes()
-        guard changes.contains(where: { $0.path == file }) else { throw failure("変更一覧にないファイルです") }
+        guard changes.contains(where: { $0.path == file }) else { throw failure(L("変更一覧にないファイルです")) }
         if changes.contains(where: { $0.path == file && $0.code == "??" }) { return try readFile(file) }
         if try headRevision() == nil {
             return try run(["--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv", "--cached", "--", file])
         }
         let text = try run(["--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv", "HEAD", "--", file])
-        return text.isEmpty ? "未追跡ファイル、またはテキスト差分のない変更です。" : text
+        return text.isEmpty ? L("未追跡ファイル、またはテキスト差分のない変更です。") : text
     }
     func commit(_ files: [String], _ message: String) throws {
         try requireIdle()
-        guard try conflicts().isEmpty, try !mergeInProgress() else { throw failure("競合を解決し、「マージ完了」を使ってください") }
+        guard try conflicts().isEmpty, try !mergeInProgress() else { throw failure(L("競合を解決し、「マージ完了」を使ってください")) }
         let changes = try changes()
         let available = Set(changes.map(\.path))
-        guard !files.isEmpty, files.allSatisfy(available.contains), !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw failure("変更ファイルとメッセージを指定してください") }
+        guard !files.isEmpty, files.allSatisfy(available.contains), !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw failure(L("変更ファイルとメッセージを指定してください")) }
         let originals = changes.filter { files.contains($0.path) && $0.code.contains("R") }.compactMap(\.original)
         for original in originals where !files.contains(original) {
             if try entryExists(original) {
-                throw failure("リネーム元に未選択のファイルがあります: \(original)。そのファイルも含める場合は選択してください。含めない場合は元の場所から移して再実行してください。")
+                throw failure(L("リネーム元に未選択のファイルがあります: \(original)。そのファイルも含める場合は選択してください。含めない場合は元の場所から移して再実行してください。"))
             }
         }
         let deleted = Set(changes.filter { $0.code.hasPrefix("D") }.map(\.path))
@@ -99,33 +99,33 @@ struct GitRepository: Sendable {
     static func clone(_ source: String, _ destination: String) throws -> GitRepository {
         let target = URL(fileURLWithPath: NSString(string: destination).expandingTildeInPath)
         let runner = GitRepository(path: target.deletingLastPathComponent().path)
-        guard !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !destination.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw runner.failure("取得元と作成先フォルダを指定してください。") }
+        guard !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !destination.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw runner.failure(L("取得元と作成先フォルダを指定してください。")) }
         var isDirectory: ObjCBool = false
         if FileManager.default.fileExists(atPath: target.path, isDirectory: &isDirectory) {
             guard isDirectory.boolValue, try FileManager.default.contentsOfDirectory(atPath: target.path).isEmpty else {
-                throw runner.failure("作成先 \(target.path) は既に使われています。別の保存先を指定してください。")
+                throw runner.failure(L("作成先 \(target.path) は既に使われています。別の保存先を指定してください。"))
             }
         }
         _ = try runner.run(["clone", "--", source, target.path])
         return try open(target.path)
     }
     func graph() throws -> String {
-        guard !(try run(["rev-list", "--all", "--max-count=1"])).isEmpty else { return "まだコミットはありません。" }
+        guard !(try run(["rev-list", "--all", "--max-count=1"])).isEmpty else { return L("まだコミットはありません。") }
         return try run(["log", "--graph", "--all", "--decorate", "--oneline", "-100", "--no-color"])
     }
     func branches() throws -> [String] { try run(["for-each-ref", "--format=%(refname:short)", "refs/heads"]).split(separator: "\n").map(String.init) }
     func remotes() throws -> [String] { try run(["remote"]).split(separator: "\n").map(String.init) }
     func validateBranch(_ name: String) throws -> String {
-        guard !name.isEmpty, !name.hasPrefix("-") else { throw failure("有効なブランチ名を指定してください") }
+        guard !name.isEmpty, !name.hasPrefix("-") else { throw failure(L("有効なブランチ名を指定してください")) }
         _ = try run(["check-ref-format", "--branch", name]); return name
     }
     func remote(_ name: String) throws -> String {
-        guard try remotes().contains(name), !name.hasPrefix("-") else { throw failure("登録済みのリモートを指定してください") }
+        guard try remotes().contains(name), !name.hasPrefix("-") else { throw failure(L("登録済みのリモートを指定してください")) }
         return name
     }
     func requireClean() throws {
         try requireIdle()
-        guard try changes().isEmpty, try !mergeInProgress() else { throw failure("変更をコミットし、進行中のマージを完了してください") }
+        guard try changes().isEmpty, try !mergeInProgress() else { throw failure(L("変更をコミットし、進行中のマージを完了してください")) }
     }
     func fetch(_ name: String) throws { _ = try run(["fetch", "--prune", remote(name)]) }
     func preferredRemote() throws -> String {
@@ -136,7 +136,7 @@ struct GitRepository: Sendable {
     }
     func remoteBranch(_ name: String) throws -> String {
         let branch = try currentBranch()
-        guard branch != "detached HEAD" else { throw failure("送受信するブランチを選んでください（現在は detached HEAD）。") }
+        guard branch != "detached HEAD" else { throw failure(L("送受信するブランチを選んでください（現在は detached HEAD）。")) }
         _ = try validateBranch(branch)
         let configured = try configuration("branch.\(branch).remote")
         if configured == name, let merge = try configuration("branch.\(branch).merge"), merge.hasPrefix("refs/heads/") {
@@ -149,13 +149,13 @@ struct GitRepository: Sendable {
         _ = try run(["pull", "--ff-only", remote(name), remoteBranch(name)])
     }
     func push(_ name: String) throws {
-        guard try headRevision() != nil else { throw failure("Push する前に最初のコミットを作成してください。") }
+        guard try headRevision() != nil else { throw failure(L("Push する前に最初のコミットを作成してください。")) }
         _ = try run(["push", "--set-upstream", remote(name), "HEAD:" + remoteBranch(name)])
     }
     func createBranch(_ name: String) throws { try requireClean(); _ = try run(["switch", "-c", validateBranch(name)]) }
     func switchBranch(_ name: String) throws {
         try requireClean()
-        guard try branches().contains(name) else { throw failure("ローカルブランチを選択してください") }
+        guard try branches().contains(name) else { throw failure(L("ローカルブランチを選択してください")) }
         _ = try run(["switch", "--", validateBranch(name)])
     }
     func renameBranch(_ old: String, _ new: String) throws { try requireIdle(); _ = try run(["branch", "-m", validateBranch(old), validateBranch(new)]) }
@@ -169,10 +169,10 @@ struct GitRepository: Sendable {
     }
     func fileURL(_ file: String) throws -> URL {
         let root = URL(fileURLWithPath: path).resolvingSymlinksInPath()
-        guard !file.hasPrefix("/"), !file.split(separator: "/").contains("..") else { throw failure("リポジトリ内のファイルを指定してください") }
+        guard !file.hasPrefix("/"), !file.split(separator: "/").contains("..") else { throw failure(L("リポジトリ内のファイルを指定してください")) }
         let url = root.appendingPathComponent(file)
         let parent = url.deletingLastPathComponent().resolvingSymlinksInPath().path
-        guard parent == root.path || parent.hasPrefix(root.path + "/") else { throw failure("リポジトリ外のファイルは操作できません") }
+        guard parent == root.path || parent.hasPrefix(root.path + "/") else { throw failure(L("リポジトリ外のファイルは操作できません")) }
         return url
     }
     func readFile(_ file: String, editable: Bool = false) throws -> String {
@@ -180,29 +180,29 @@ struct GitRepository: Sendable {
         guard try entryExists(file) else { return "" }
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
         if attributes[.type] as? FileAttributeType == .typeSymbolicLink {
-            guard !editable else { throw failure("シンボリックリンクは外部で解決してください") }
-            return "シンボリックリンク → " + (try FileManager.default.destinationOfSymbolicLink(atPath: url.path))
+            guard !editable else { throw failure(L("シンボリックリンクは外部で解決してください")) }
+            return L("シンボリックリンク → ") + (try FileManager.default.destinationOfSymbolicLink(atPath: url.path))
         }
         if ((attributes[.size] as? NSNumber)?.intValue ?? 0) > 1024 * 1024 {
-            if editable { throw failure("1 MiB を超えるファイルは外部で解決してください") }
-            return "プレビュー上限の 1 MiB を超えています。"
+            if editable { throw failure(L("1 MiB を超えるファイルは外部で解決してください")) }
+            return L("プレビュー上限の 1 MiB を超えています。")
         }
         let data = try Data(contentsOf: url)
         if data.contains(0) {
-            if editable { throw failure("バイナリファイルは外部で解決してください") }
-            return "バイナリファイルです。"
+            if editable { throw failure(L("バイナリファイルは外部で解決してください")) }
+            return L("バイナリファイルです。")
         }
         if let text = String(data: data, encoding: .utf8) { return text }
-        if editable { throw failure("UTF-8 以外のファイルは外部で解決してください") }
-        return "注意: UTF-8 で読めない文字を置き換えて表示しています。\n\n" + String(decoding: data, as: UTF8.self)
+        if editable { throw failure(L("UTF-8 以外のファイルは外部で解決してください")) }
+        return L("注意: UTF-8 で読めない文字を置き換えて表示しています。\n\n") + String(decoding: data, as: UTF8.self)
     }
     func conflictText(_ file: String) throws -> String {
-        guard try conflicts().contains(file) else { throw failure("競合中のファイルを選択してください") }
+        guard try conflicts().contains(file) else { throw failure(L("競合中のファイルを選択してください")) }
         return try readFile(file, editable: true)
     }
     func saveResolution(_ file: String, _ text: String) throws {
         _ = try conflictText(file)
-        guard !text.components(separatedBy: "\n").contains(where: { $0.hasPrefix("<<<<<<< ") || $0.hasPrefix("=======") || $0.hasPrefix(">>>>>>> ") }) else { throw failure("競合マーカーを取り除いてください") }
+        guard !text.components(separatedBy: "\n").contains(where: { $0.hasPrefix("<<<<<<< ") || $0.hasPrefix("=======") || $0.hasPrefix(">>>>>>> ") }) else { throw failure(L("競合マーカーを取り除いてください")) }
         let url = try fileURL(file)
         let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
         try text.write(to: url, atomically: true, encoding: .utf8)
@@ -210,15 +210,15 @@ struct GitRepository: Sendable {
         try markResolved(file)
     }
     func markResolved(_ file: String) throws {
-        guard try conflicts().contains(file) else { throw failure("競合中のファイルを選択してください") }
+        guard try conflicts().contains(file) else { throw failure(L("競合中のファイルを選択してください")) }
         _ = try run(["--literal-pathspecs", "add", "-A", "--", file])
     }
     func finishMerge(_ message: String) throws {
-        guard try mergeInProgress(), try conflicts().isEmpty, !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw failure("競合を解決し、コミットメッセージを入力してください") }
+        guard try mergeInProgress(), try conflicts().isEmpty, !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw failure(L("競合を解決し、コミットメッセージを入力してください")) }
         _ = try run(["commit", "-m", message])
     }
     func abortMerge() throws {
-        guard try mergeInProgress() else { throw failure("進行中のマージはありません") }
+        guard try mergeInProgress() else { throw failure(L("進行中のマージはありません")) }
         _ = try run(["merge", "--abort"])
     }
 }

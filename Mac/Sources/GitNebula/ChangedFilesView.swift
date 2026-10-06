@@ -4,6 +4,7 @@ import AppKit
 /// A list owns selection and sorting, never a file comparison or its contents.
 @MainActor
 struct ChangedFilesView: View {
+    @ObservedObject private var appearance = AppearanceSettings.shared
     let repo: GitRepository
     let files: [Change]
     var base: String? = "HEAD"
@@ -31,19 +32,19 @@ struct ChangedFilesView: View {
     var body: some View {
         VStack(spacing: 8) {
             HStack {
-                TextField("ファイルを絞り込み", text: $query).textFieldStyle(.roundedBorder)
+                TextField(L("ファイルを絞り込み"), text: $query).textFieldStyle(.roundedBorder)
                     .accessibilityIdentifier("diffFileSearch")
-                Text("\(filtered.count) ファイル").font(.caption).foregroundStyle(.secondary)
-                Button("差分を開く") { if let current { open(current) } }.disabled(current == nil)
+                Text(L("\(filtered.count) ファイル")).font(.caption).foregroundStyle(.secondary)
+                Button(L("差分を開く")) { if let current { open(current) } }.disabled(current == nil)
                     .accessibilityIdentifier("openFileDiff")
             }
             ChangedFilesTable(files: filtered, allowsChecking: allowsChecking, showsStage: target == nil,
                               selection: $active, checked: $checked, sort: $sort, ascending: $ascending, open: open)
                 .overlay {
-                    if filtered.isEmpty { Text(files.isEmpty ? "変更ファイルはありません" : "一致するファイルはありません").foregroundStyle(.secondary).allowsHitTesting(false) }
+                    if filtered.isEmpty { Text(files.isEmpty ? L("変更ファイルはありません") : L("一致するファイルはありません")).foregroundStyle(.secondary).allowsHitTesting(false) }
                 }
             HStack {
-                Text("ファイルをダブルクリック、または選択して Enter で差分を開きます。").font(.caption).foregroundStyle(.secondary)
+                Text(L("ファイルをダブルクリック、または選択して Enter で差分を開きます。")).font(.caption).foregroundStyle(.secondary)
                 Spacer()
             }
         }.frame(minHeight: 160, maxHeight: .infinity).accessibilityIdentifier("changedFilesScreen")
@@ -52,12 +53,12 @@ struct ChangedFilesView: View {
 
 extension Change {
     var stageLabel: String {
-        if code == "??" { return "未追跡" }
+        if code == "??" { return L("未追跡") }
         let status = Array(code)
         guard status.count == 2 else { return "—" }
-        if label == "競合" { return "競合" }
+        if label == L("競合") { return L("競合") }
         let staged = status[0] != " ", unstaged = status[1] != " "
-        return staged && unstaged ? "ステージ済み＋未ステージ" : staged ? "ステージ済み" : "未ステージ"
+        return staged && unstaged ? L("ステージ済み＋未ステージ") : staged ? L("ステージ済み") : L("未ステージ")
     }
 }
 
@@ -77,6 +78,7 @@ final class FileTableView: NSTableView {
 
 /// Native rows provide reliable double-click/Enter and retain exact scroll offsets.
 struct ChangedFilesTable: NSViewRepresentable {
+    @ObservedObject private var appearance = AppearanceSettings.shared
     let files: [Change]
     let allowsChecking: Bool
     let showsStage: Bool
@@ -94,15 +96,15 @@ struct ChangedFilesTable: NSViewRepresentable {
         table.rowHeight = 30; table.usesAlternatingRowBackgroundColors = true
         table.allowsEmptySelection = true; table.allowsMultipleSelection = false
         table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
-        if allowsChecking { addColumn(table, "check", "対象", 48) }
-        addColumn(table, "status", "状態", 100)
-        if showsStage { addColumn(table, "stage", "ステージ", 185) }
-        addColumn(table, "path", "ファイル（リポジトリからの相対パス）", 620)
+        if allowsChecking { addColumn(table, "check", L("対象"), 48) }
+        addColumn(table, "status", L("状態"), 100)
+        if showsStage { addColumn(table, "stage", L("ステージ"), 185) }
+        addColumn(table, "path", L("ファイル（リポジトリからの相対パス）"), 620)
         table.delegate = context.coordinator; table.dataSource = context.coordinator
         table.target = context.coordinator; table.doubleAction = #selector(Coordinator.openFile)
         table.openSelected = { [weak coordinator = context.coordinator] in coordinator?.openFile() }
         let menu = NSMenu()
-        let item = NSMenuItem(title: "差分を開く", action: #selector(Coordinator.openFile), keyEquivalent: "")
+        let item = NSMenuItem(title: L("差分を開く"), action: #selector(Coordinator.openFile), keyEquivalent: "")
         item.target = context.coordinator; menu.addItem(item); table.menu = menu
         context.coordinator.table = table; scroll.documentView = table
         return scroll
@@ -118,7 +120,13 @@ struct ChangedFilesTable: NSViewRepresentable {
         coordinator.parent = self
         coordinator.enabled = context.environment.isEnabled
         guard let table = coordinator.table else { return }
-        if coordinator.displayedFiles != files || coordinator.displayedChecked != checked || coordinator.displayedEnabled != coordinator.enabled {
+        for column in table.tableColumns {
+            column.title = ["check": L("対象"), "status": L("状態"), "stage": L("ステージ"), "path": L("ファイル（リポジトリからの相対パス）")][column.identifier.rawValue] ?? column.title
+        }
+        table.menu?.items.first?.title = L("差分を開く")
+        let languageChanged = coordinator.language != appearance.language
+        coordinator.language = appearance.language
+        if languageChanged || coordinator.displayedFiles != files || coordinator.displayedChecked != checked || coordinator.displayedEnabled != coordinator.enabled {
             let offset = scroll.contentView.bounds.origin
             coordinator.updating = true; table.reloadData(); coordinator.updating = false
             coordinator.displayedFiles = files; coordinator.displayedChecked = checked; coordinator.displayedEnabled = coordinator.enabled
@@ -136,6 +144,7 @@ struct ChangedFilesTable: NSViewRepresentable {
         var updating = false
         var enabled = true
         var displayedEnabled = true
+        var language: AppLanguage?
         var displayedFiles: [Change]?
         var displayedChecked = Set<String>()
         init(_ parent: ChangedFilesTable) { self.parent = parent }
@@ -147,7 +156,7 @@ struct ChangedFilesTable: NSViewRepresentable {
                 let button = NSButton(checkboxWithTitle: "", target: self, action: #selector(checkFile(_:)))
                 button.isEnabled = enabled
                 button.tag = row; button.state = parent.checked.contains(file.path) ? .on : .off
-                button.setAccessibilityLabel("対象: " + file.path)
+                button.setAccessibilityLabel(L("対象: ") + file.path)
                 return button
             }
             let value = key == "status" ? file.label : key == "stage" ? file.stageLabel : file.original.map { $0 + " → " + file.path } ?? file.path

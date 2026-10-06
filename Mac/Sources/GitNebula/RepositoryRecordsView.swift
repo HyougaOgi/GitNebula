@@ -12,10 +12,10 @@ enum RepositoryRecordKind: String, Sendable {
     case blame, reflog, worktrees, submodules
     var columns: [String] {
         switch self {
-        case .blame: return ["行", "内容", "作成者", "コミット"]
-        case .reflog: return ["参照", "操作", "作成者", "コミット"]
-        case .worktrees: return ["フォルダ", "ブランチ", "状態", "コミット"]
-        case .submodules: return ["パス", "状態", "参照", "コミット"]
+        case .blame: return [L("行"), L("内容"), L("作成者"), L("コミット")]
+        case .reflog: return [L("参照"), L("操作"), L("作成者"), L("コミット")]
+        case .worktrees: return [L("フォルダ"), L("ブランチ"), L("状態"), L("コミット")]
+        case .submodules: return [L("パス"), L("状態"), L("参照"), L("コミット")]
         }
     }
 }
@@ -29,7 +29,7 @@ extension GitRepository {
         case .blame:
             let ref = try revision(second)
             let content = try revisionFile(first, at: ref)
-            guard content.notice == nil, !content.data.contains(0) else { throw failure(content.notice ?? "バイナリファイルの Blame は表示できません。") }
+            guard content.notice == nil, !content.data.contains(0) else { throw failure(content.notice ?? L("バイナリファイルの Blame は表示できません。")) }
             let result = try run(["--literal-pathspecs", "blame", "--line-porcelain", ref, "--", first])
             var hash = "", author = "", number = ""
             for line in result.components(separatedBy: "\n") {
@@ -54,7 +54,7 @@ extension GitRepository {
                 else if field.hasPrefix("HEAD ") { hash = String(field.dropFirst(5).prefix(8)) }
                 else if field.hasPrefix("branch ") { branch = String(field.dropFirst(7)).replacingOccurrences(of: "refs/heads/", with: "") }
                 else if !field.isEmpty { status += (status.isEmpty ? "" : ", ") + field }
-                else if !path.isEmpty { append(path, branch, status.isEmpty ? "利用可能" : status, hash); path = "" }
+                else if !path.isEmpty { append(path, branch, status.isEmpty ? L("利用可能") : status, hash); path = "" }
             }
         case .submodules:
             for line in try submodules().components(separatedBy: "\n") where line.count >= 42 {
@@ -62,7 +62,7 @@ extension GitRepository {
                 let range = rest.range(of: " (", options: .backwards)
                 let path = range.map { String(rest[..<$0.lowerBound]) } ?? rest
                 let ref = range.map { String(rest[$0.upperBound...].dropLast()) } ?? ""
-                let status = flag == "-" ? "未初期化" : flag == "+" ? "記録と異なるコミット" : flag == "U" ? "競合" : "一致"
+                let status = flag == "-" ? L("未初期化") : flag == "+" ? L("記録と異なるコミット") : flag == "U" ? L("競合") : L("一致")
                 append(path, status, ref, String(hash.prefix(8)))
             }
         }
@@ -72,6 +72,7 @@ extension GitRepository {
 
 @MainActor
 struct RepositoryRecordsView: View {
+    @ObservedObject private var appearance = AppearanceSettings.shared
     let repo: GitRepository
     let kind: RepositoryRecordKind
     var first = ""
@@ -91,7 +92,7 @@ struct RepositoryRecordsView: View {
                 TableColumn(kind.columns[3]) { Text($0.fourth).font(.system(.caption, design: .monospaced)) }.width(90)
             }.accessibilityIdentifier("repositoryRecords")
             .contextMenu {
-                Button("選択行をコピー") {
+                Button(L("選択行をコピー")) {
                     if let row = rows.first(where: { $0.id == selection }) {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString([row.first, row.second, row.third, row.fourth].joined(separator: "\t"), forType: .string)
@@ -100,10 +101,10 @@ struct RepositoryRecordsView: View {
             }
             .overlay {
                 if loading { ProgressView() }
-                else if let error { BrowserPlaceholder(title: "読み込めませんでした", detail: error, symbol: "exclamationmark.triangle") }
-                else if rows.isEmpty { Text("表示する項目はありません").foregroundStyle(.secondary) }
+                else if let error { BrowserPlaceholder(title: L("読み込めませんでした"), detail: error, symbol: "exclamationmark.triangle") }
+                else if rows.isEmpty { Text(L("表示する項目はありません")).foregroundStyle(.secondary) }
             }
-            Text("\(rows.count) 件").font(.caption).foregroundStyle(.secondary)
+            Text(L("\(rows.count) 件")).font(.caption).foregroundStyle(.secondary)
         }.task(id: [repo.path, kind.rawValue, first, second, refreshKey]) {
             loading = true; error = nil
             let repository = repo, type = kind, a = first, b = second

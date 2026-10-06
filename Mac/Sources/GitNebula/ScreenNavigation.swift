@@ -12,21 +12,21 @@ enum UtilityPage: Equatable {
     case files, branches, conflicts, identity, settings, tool(RepositoryTool)
     var title: String {
         switch self {
-        case .settings: return "アプリの設定"
-        case .files: return "作業ファイルの管理"
-        case .branches: return "ブランチの管理"
-        case .conflicts: return "競合の解決"
-        case .identity: return "コミット作成者の設定"
+        case .settings: return L("アプリの設定")
+        case .files: return L("作業ファイルの管理")
+        case .branches: return L("ブランチの管理")
+        case .conflicts: return L("競合の解決")
+        case .identity: return L("コミット作成者の設定")
         case .tool(let tool): return tool.title
         }
     }
     var hint: String {
         switch self {
-        case .settings: return "SSH 認証、常駐と Git の実行ファイルを設定します。"
-        case .files: return "ステージ・ステージ解除・無視・変更の破棄を行います。"
-        case .branches: return "ブランチの作成・名前変更・削除・マージを行います。"
-        case .conflicts: return "競合ファイルを解決し、進行中の操作を再開または中止します。"
-        case .identity: return "このリポジトリで使用するコミット作成者を設定します。"
+        case .settings: return L("SSH 認証、常駐と Git の実行ファイルを設定します。")
+        case .files: return L("ステージ・ステージ解除・無視・変更の破棄を行います。")
+        case .branches: return L("ブランチの作成・名前変更・削除・マージを行います。")
+        case .conflicts: return L("競合ファイルを解決し、進行中の操作を再開または中止します。")
+        case .identity: return L("このリポジトリで使用するコミット作成者を設定します。")
         case .tool(let tool): return tool.hint
         }
     }
@@ -59,31 +59,31 @@ final class ScreenNavigation: ObservableObject {
         let id = UUID()
         let host: NSHostingView<AnyView>
         let model: Workspace?
-        let title: String
+        private let titleProvider: () -> String
+        var title: String { titleProvider() }
         weak var firstResponder: NSResponder?
-        init(host: NSHostingView<AnyView>, model: Workspace?, title: String) { self.host = host; self.model = model; self.title = title }
+        init(host: NSHostingView<AnyView>, model: Workspace?, title: @escaping () -> String) { self.host = host; self.model = model; self.titleProvider = title }
     }
     @Published private(set) var frames: [Frame] = []
     var current: Frame? { frames.last }
-    var busy: Bool { (frames + suspendedFrames).contains { $0.model?.busy == true } }
+    var busy: Bool { frames.contains { $0.model?.busy == true } }
     func canReuseLauncher(_ model: Workspace) -> Bool {
         frames.count <= 1 && !busy && !model.busy && model.action == .open && model.repository == nil
     }
-    private var suspendedFrames: [Frame] = []
     private var launchID: UUID?
     private var closeWindow: (() -> Void)?
 
     func installRoot(_ model: Workspace, close: (() -> Void)?) {
         guard launchID != model.launchID || frames.isEmpty else { return }
         frames.forEach { $0.model?.isScreenActive = false }
-        frames = []; suspendedFrames = []; launchID = model.launchID; closeWindow = close
+        frames = []; launchID = model.launchID; closeWindow = close
         append(OperationScreen(model: model, closeWindow: close), model: model, title: model.action.title)
     }
     private func actions() -> ScreenActions {
         ScreenActions(canGoBack: !frames.isEmpty,
                       home: { [weak self] in self?.home() },
                       resume: { [weak self] in self?.resume() },
-                      canResume: !suspendedFrames.isEmpty,
+                      canResume: current?.model?.action == .open && frames.count > 1,
                       back: { [weak self] in self?.back() },
                       close: { [weak self] in
                           guard let self, !self.busy else { return }
@@ -94,13 +94,13 @@ final class ScreenNavigation: ObservableObject {
                       openComparison: { [weak self] in self?.openComparison($0) },
                       openRevision: { [weak self] in self?.openRevision($0, reference: $1, stash: $2) })
     }
-    private func append<V: View>(_ view: V, model: Workspace? = nil, title: String) {
+    private func append<V: View>(_ view: V, model: Workspace? = nil, title: @autoclosure @escaping () -> String) {
         if let previous = current {
             previous.firstResponder = previous.host.window?.firstResponder
             previous.model?.isScreenActive = false
         }
-        let host = NSHostingView(rootView: AnyView(view.environment(\.screenActions, actions())))
-        host.appearance = NSAppearance(named: .darkAqua)
+        let callbacks = actions()
+        let host = NSHostingView(rootView: AnyView(AppearanceScope { view.environment(\.screenActions, callbacks) }))
         let frame = Frame(host: host, model: model, title: title)
         model?.isScreenActive = true
         frames.append(frame)
@@ -127,27 +127,14 @@ final class ScreenNavigation: ObservableObject {
         append(OperationScreen(model: model, closeWindow: closeWindow), model: model, title: request.action.title)
     }
     func home() {
-        guard !busy, let root = frames.first, frames.count > 1 else { return }
-        // Retain drafts and native table state while showing the home screen.
-        suspendedFrames = suspendedFrames.isEmpty ? frames : suspendedFrames + frames.dropFirst()
-        current?.model?.isScreenActive = false
-        if let source = frames.reversed().compactMap(\.model).first(where: { $0.repository != nil }), let model = root.model {
-            if let repo = source.repository { model.adoptRepository(repo) }
-        }
-        frames = [root]; root.model?.isScreenActive = true
-        updateHomeCallbacks()
+        guard !busy, current?.model?.action != .open || current?.title != GitAction.open.title else { return }
+        let model = Workspace()
+        model.repository = frames.reversed().compactMap(\.model).first { $0.repository != nil }?.repository
+        model.repositoryPath = model.repository?.path ?? ""
+        append(OperationScreen(model: model, closeWindow: closeWindow), model: model, title: GitAction.open.title)
     }
     func resume() {
-        guard !suspendedFrames.isEmpty, !busy else { return }
-        current?.model?.isScreenActive = false
-        frames = suspendedFrames; suspendedFrames = []
-        current?.model?.isScreenActive = true; current?.model?.refreshIfNeeded()
-        updateHomeCallbacks()
-    }
-    private func updateHomeCallbacks() {
-        guard let root = frames.first, let model = root.model, model.action == .open else { return }
-        var callbacks = actions(); callbacks.canGoBack = false
-        root.host.rootView = AnyView(OperationScreen(model: model).environment(\.screenActions, callbacks))
+        if current?.model?.action == .open { back() }
     }
     func openAction(_ action: GitAction) {
         guard let model = childModel(action: action) else { return }
@@ -162,19 +149,20 @@ final class ScreenNavigation: ObservableObject {
             default: break
             }
         }
-        guard let model = childModel(action: .workspace) else { return }
+        guard !busy else { return }
+        guard let model = page == .settings ? Workspace() : childModel(action: .workspace) else { return }
         append(OperationScreen(model: model, page: page, closeWindow: closeWindow), model: model, title: page.title)
     }
     func openComparison(_ request: FileComparisonRequest) {
         guard !busy else { return }
-        append(DetailScreen(title: "ファイル差分", subtitle: request.change.path) { FileComparisonScreen(request: request) }, title: request.change.path + " — ファイル差分")
+        append(DetailScreen(title: L("ファイル差分"), subtitle: request.change.path) { FileComparisonScreen(request: request) }, title: request.change.path + L(" — ファイル差分"))
     }
     func openRevision(_ repo: GitRepository, reference: String, stash: Bool) {
         guard !busy else { return }
-        append(DetailScreen(title: "変更ファイル一覧", subtitle: reference) {
+        append(DetailScreen(title: L("変更ファイル一覧"), subtitle: reference) {
             if stash { StashComparisonView(repo: repo, reference: reference) }
             else { CommitReferenceView(repo: repo, reference: reference) }
-        }, title: "変更ファイル一覧")
+        }, title: L("変更ファイル一覧"))
     }
 }
 
@@ -186,7 +174,7 @@ final class RetainedScreenHost: NSView {
         if !screenTitle.isEmpty { window?.title = screenTitle }
     }
     func display(_ frame: ScreenNavigation.Frame) {
-        screenTitle = frame.title == "GitNebula" ? "GitNebula" : frame.title + " — GitNebula"
+        screenTitle = frame.title == "GitNebula" ? "GitNebula" : LT(frame.title) + " — GitNebula"
         window?.title = screenTitle
         guard active !== frame.host else { return }
         // Remove every stale child; only one route may be attached to the window.
@@ -210,6 +198,7 @@ struct RouteHost: NSViewRepresentable {
 
 @MainActor
 struct ContentView: View {
+    @ObservedObject private var appearance = AppearanceSettings.shared
     @ObservedObject var model: Workspace
     var closeWindow: (() -> Void)?
     @StateObject var navigation: ScreenNavigation
@@ -225,6 +214,7 @@ struct ContentView: View {
 }
 
 struct DetailScreen<Content: View>: View {
+    @ObservedObject private var appearance = AppearanceSettings.shared
     let title: String
     let subtitle: String
     @ViewBuilder let content: () -> Content
@@ -232,7 +222,7 @@ struct DetailScreen<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Button(action: navigation.back) { Label("戻る", systemImage: "chevron.left") }
+                Button(action: navigation.back) { Label(L("戻る"), systemImage: "chevron.left") }
                     .keyboardShortcut("[", modifiers: .command).accessibilityIdentifier("navigateBack")
                 Text(title).font(.title2.bold())
                 Spacer()
@@ -240,20 +230,21 @@ struct DetailScreen<Content: View>: View {
             }
             Text(subtitle).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
             content().frame(maxWidth: .infinity, maxHeight: .infinity)
-        }.padding(16).background(NebulaBackground()).foregroundStyle(Color(red: 0.91, green: 0.92, blue: 0.98))
-            .tint(Color(red: 0.70, green: 0.62, blue: 1)).environment(\.colorScheme, .dark).preferredColorScheme(.dark)
+        }.padding(16).background(NebulaBackground()).foregroundStyle(.primary)
+            .tint(Color(red: 0.70, green: 0.62, blue: 1))
     }
 }
 
 struct FileComparisonScreen: View {
+    @ObservedObject private var appearance = AppearanceSettings.shared
     let request: FileComparisonRequest
     @State private var document: DiffDocument?
     @State private var error: String?
     var body: some View {
         Group {
             if let document { SideBySideDiffView(document: document).id(document.id) }
-            else if let error { BrowserPlaceholder(title: "差分を読み込めませんでした", detail: error, symbol: "exclamationmark.triangle") }
-            else { ProgressView("変更前後を読み込み中…").frame(maxWidth: .infinity, maxHeight: .infinity) }
+            else if let error { BrowserPlaceholder(title: L("差分を読み込めませんでした"), detail: error, symbol: "exclamationmark.triangle") }
+            else { ProgressView(L("変更前後を読み込み中…")).frame(maxWidth: .infinity, maxHeight: .infinity) }
         }.accessibilityIdentifier("fileComparisonScreen")
         .task {
             guard document == nil else { return }

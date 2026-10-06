@@ -29,7 +29,8 @@ public static class GitProcess
     }
     public static string[] Lines(string output) => output.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line => line.TrimEnd('\r')).Where(line => line.Length > 0).ToArray();
     public static Task<string> Run(string path, params string[] arguments) => RunAccepting(path, arguments, [0]);
-    public static async Task<string> RunAccepting(string path, string[] arguments, int[] accepting)
+    public static async Task<string> RunAccepting(string path, string[] arguments, int[] accepting) => (await RunWithOutput(path, arguments, accepting)).Output;
+    public static async Task<(string Output, string Diagnostics)> RunWithOutput(string path, string[] arguments, int[] accepting)
     {
         var info = new ProcessStartInfo(Executable) {
             UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true,
@@ -45,16 +46,16 @@ public static class GitProcess
         foreach (var arg in new[] { "--no-pager", "-c", "color.ui=false", "-c", "core.quotepath=false" }.Concat(sshArguments).Concat(new[] { "-C", path }).Concat(arguments)) info.ArgumentList.Add(arg);
         using var process = new Process { StartInfo = info };
         try { process.Start(); }
-        catch (Win32Exception error) { throw new InvalidOperationException($"Git を起動できません（{Executable}）。設定で Git の実行ファイルを確認してください。\n{error.Message}", error); }
+        catch (Win32Exception error) { throw new InvalidOperationException(Localization.Format($"Git を起動できません（{Executable}）。設定で Git の実行ファイルを確認してください。\n{error.Message}"), error); }
         process.StandardInput.Close();
         var output = process.StandardOutput.ReadToEndAsync();
         var errorOutput = process.StandardError.ReadToEndAsync();
         await process.WaitForExitAsync();
         var stdout = await output; var stderr = await errorOutput;
         if (!accepting.Contains(process.ExitCode)) {
-            var hint = stderr.Contains("Permission denied (publickey)") || stderr.Contains("Load key") || stderr.Contains("Host key verification failed") ? "\n詳細設定の「SSH 認証」で秘密鍵とパスフレーズを確認してください。" : "";
-            throw new InvalidOperationException($"git {arguments.FirstOrDefault()} が失敗しました（終了コード {process.ExitCode}）。\n{stdout}{stderr}{hint}");
+            var hint = stderr.Contains("Permission denied (publickey)") || stderr.Contains("Load key") || stderr.Contains("Host key verification failed") ? Localization.Text("\n詳細設定の「SSH 認証」で秘密鍵とパスフレーズを確認してください。") : "";
+            throw new InvalidOperationException(Localization.Format($"git {arguments.FirstOrDefault()} が失敗しました（終了コード {process.ExitCode}）。\n{stdout}{stderr}{hint}"));
         }
-        return stdout;
+        return (stdout, stderr);
     }
 }

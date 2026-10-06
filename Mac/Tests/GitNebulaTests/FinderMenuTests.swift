@@ -4,7 +4,7 @@ import FinderSync
 @testable import GitNebula
 
 @MainActor
-final class FinderMenuTests: XCTestCase {
+final class FinderMenuTests: LocalizedTestCase {
     @objc private func launch(_ sender: NSMenuItem) {}
 
     func testMenuGroupsContainEveryActionOnceAndMatchApplicationMenu() throws {
@@ -19,7 +19,7 @@ final class FinderMenuTests: XCTestCase {
 
     private func items(_ menu: FinderMenu, paths: [String], cloneParent: String? = nil, cloneIntoSelection: String? = nil) throws -> [NSMenuItem] {
         let root = try XCTUnwrap(menu.makeMenu(paths: paths, cloneParent: cloneParent, cloneIntoSelection: cloneIntoSelection, target: self, selector: #selector(launch(_:))))
-        return try XCTUnwrap(root.items.first?.submenu).items.filter { !$0.isSeparatorItem }
+        return try XCTUnwrap(root.items.first?.submenu).items.filter { $0.action != nil }
     }
 
     private func finderCopy(_ item: NSMenuItem) -> NSMenuItem {

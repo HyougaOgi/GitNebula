@@ -1,10 +1,11 @@
 import XCTest
 @testable import GitNebula
 
-final class GitTests: XCTestCase {
+final class GitTests: LocalizedTestCase {
     var root: URL!
     var repo: GitRepository!
     override func setUpWithError() throws {
+        try super.setUpWithError()
         root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         repo = GitRepository(path: root.path)
@@ -12,7 +13,8 @@ final class GitTests: XCTestCase {
         _ = try repo.run(["config", "user.name", "Test"])
         _ = try repo.run(["config", "user.email", "test@example.invalid"])
     }
-    override func tearDownWithError() throws { try FileManager.default.removeItem(at: root) }
+    override func tearDownWithError() throws {
+        try super.tearDownWithError(); try FileManager.default.removeItem(at: root) }
     func write(_ file: String, _ text: String) throws { try text.write(to: root.appendingPathComponent(file), atomically: true, encoding: .utf8) }
     func testSelectionRenameAndStagedDeletion() throws {
         try write("old.txt", "base\n"); try write("other.txt", "unselected\n")

@@ -33,7 +33,7 @@ public static class SSHCredentialStore
     {
         if (!ReadNative(Target(key), 1, 0, out var pointer)) {
             if (Marshal.GetLastWin32Error() == 1168) return null;
-            throw new Win32Exception(Marshal.GetLastWin32Error(), "SSH パスフレーズを資格情報マネージャーから読み込めません。");
+            throw new Win32Exception(Marshal.GetLastWin32Error(), Localization.Text("SSH パスフレーズを資格情報マネージャーから読み込めません。"));
         }
         try { var credential = Marshal.PtrToStructure<Credential>(pointer); return Marshal.PtrToStringUni(credential.Blob, (int)credential.BlobSize / 2); }
         finally { CredFree(pointer); }
@@ -45,12 +45,12 @@ public static class SSHCredentialStore
         try {
             Marshal.Copy(bytes, 0, pointer, bytes.Length);
             var credential = new Credential { Type = 1, TargetName = Target(key), BlobSize = (uint)bytes.Length, Blob = pointer, Persist = 2, UserName = Environment.UserName };
-            if (!Write(ref credential, 0)) throw new Win32Exception(Marshal.GetLastWin32Error(), "SSH パスフレーズを資格情報マネージャーに保存できません。");
+            if (!Write(ref credential, 0)) throw new Win32Exception(Marshal.GetLastWin32Error(), Localization.Text("SSH パスフレーズを資格情報マネージャーに保存できません。"));
         } finally { Array.Clear(bytes); for (var index = 0; index < bytes.Length; index++) Marshal.WriteByte(pointer, index, 0); Marshal.FreeHGlobal(pointer); }
     }
     public static void Remove(string key)
     {
-        if (!Delete(Target(key), 1, 0) && Marshal.GetLastWin32Error() != 1168) throw new Win32Exception(Marshal.GetLastWin32Error(), "保存した SSH パスフレーズを削除できません。");
+        if (!Delete(Target(key), 1, 0) && Marshal.GetLastWin32Error() != 1168) throw new Win32Exception(Marshal.GetLastWin32Error(), Localization.Text("保存した SSH パスフレーズを削除できません。"));
     }
 }
 

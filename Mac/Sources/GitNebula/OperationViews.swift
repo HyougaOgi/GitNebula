@@ -37,6 +37,7 @@ extension GitRepository {
 
 @MainActor
 struct RemoteOperationView: View {
+    @ObservedObject private var appearance = AppearanceSettings.shared
     @Environment(\.screenActions) private var navigation
     @ObservedObject var model: Workspace
     @State private var overview: RemoteOverview?
@@ -44,28 +45,40 @@ struct RemoteOperationView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             if model.remotes.isEmpty {
-                BrowserPlaceholder(title: "送受信先を登録してください", detail: "リモートの名前と URL を設定すると、送受信できるようになります。", symbol: "network")
+                BrowserPlaceholder(title: L("送受信先を登録してください"), detail: L("リモートの名前と URL を設定すると、送受信できるようになります。"), symbol: "network")
             } else {
-                Picker("リモート", selection: $model.chosenRemote) { ForEach(model.remotes, id: \.self) { Text($0).tag($0) } }
+                Picker(L("リモート"), selection: $model.chosenRemote) { ForEach(model.remotes, id: \.self) { Text($0).tag($0) } }
                 if let overview {
                     VStack(alignment: .leading, spacing: 8) {
-                        LabeledContent("リモート URL", value: overview.url)
-                        LabeledContent("現在のブランチ", value: model.branch)
-                        LabeledContent("追跡先", value: overview.tracking)
+                        LabeledContent(L("リモート URL"), value: overview.url)
+                        LabeledContent(L("現在のブランチ"), value: model.branch)
+                        LabeledContent(L("追跡先"), value: overview.tracking)
                     }.textSelection(.enabled)
                     HStack(spacing: 16) {
-                        countCard("送信待ち", count: overview.ahead, symbol: "arrow.up.circle", color: .purple)
-                        countCard("未取り込み", count: overview.behind, symbol: "arrow.down.circle", color: .cyan)
+                        countCard(L("送信待ち"), count: overview.ahead, symbol: "arrow.up.circle", color: .purple)
+                        countCard(L("未取り込み"), count: overview.behind, symbol: "arrow.down.circle", color: .cyan)
                     }
-                    Text("件数は取得済みの追跡情報を元に表示します。Fetch で最新の状態に更新できます。").font(.caption).foregroundStyle(.secondary)
+                    Text(L("件数は取得済みの追跡情報を元に表示します。Fetch で最新の状態に更新できます。")).font(.caption).foregroundStyle(.secondary)
                 }
                 if let error { Text(error).foregroundStyle(.orange).textSelection(.enabled) }
                 HStack {
                     Spacer()
-                    Button(model.action.title, action: model.runAction).buttonStyle(.borderedProminent).controlSize(.large)
+                    Button(model.action.title, action: model.runAction).buttonStyle(.borderedProminent).controlSize(.large).disabled(!model.canRunRemote).accessibilityIdentifier("executeRemote")
                 }
             }
-            Button("リモートを設定") { navigation.openAction(.remotes) }
+            if let report = model.transferReport {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(report.summary, systemImage: "checkmark.circle.fill").foregroundStyle(.green).accessibilityIdentifier("remoteResult")
+                    if let after = report.after {
+                        Text("HEAD: \(report.before.map { String($0.prefix(8)) } ?? "—") → \(after.prefix(8))").font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                    }
+                    if !report.changedFiles.isEmpty { Text(report.changedFiles.joined(separator: "\n")).font(.caption).textSelection(.enabled) }
+                    if !report.output.isEmpty {
+                        DisclosureGroup(L("Git の出力")) { Text(report.output).font(.system(.caption, design: .monospaced)).textSelection(.enabled) }
+                    }
+                }.padding(12).frame(maxWidth: .infinity, alignment: .leading).background(.green.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+            }
+            Button(L("リモートを設定")) { navigation.openAction(.remotes) }
         }.padding(20).background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
         .task(id: [model.repository?.path ?? "", model.chosenRemote, model.revisionID.uuidString]) {
             overview = nil; error = nil
@@ -80,33 +93,34 @@ struct RemoteOperationView: View {
     private func countCard(_ title: String, count: Int?, symbol: String, color: Color) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Label(title, systemImage: symbol).foregroundStyle(color)
-            Text(count.map { "\($0) コミット" } ?? "未取得").font(.title2.bold())
+            Text(count.map { L("\($0) コミット") } ?? L("未取得")).font(.title2.bold())
         }.padding(16).frame(maxWidth: .infinity, alignment: .leading).background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
 @MainActor
 struct BranchSelectionView: View {
+    @ObservedObject private var appearance = AppearanceSettings.shared
     @ObservedObject var model: Workspace
     @State private var branches: [BranchRecord] = []
     @State private var query = ""
     @State private var error: String?
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            TextField("ブランチを検索", text: $query).textFieldStyle(.roundedBorder)
+            TextField(L("ブランチを検索"), text: $query).textFieldStyle(.roundedBorder)
             Table(branches.filter { query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) }, selection: Binding(get: { Optional(model.chosenBranch) }, set: { model.chosenBranch = $0 ?? "" })) {
-                TableColumn("ブランチ") { branch in
+                TableColumn(L("ブランチ")) { branch in
                     HStack { Image(systemName: branch.name == model.branch ? "checkmark.circle.fill" : "arrow.triangle.branch"); Text(branch.name) }
                 }.width(min: 150, ideal: 220)
-                TableColumn("最新のコミット", value: \.subject)
-                TableColumn("追跡先", value: \.upstream).width(min: 100, ideal: 140)
+                TableColumn(L("最新のコミット"), value: \.subject)
+                TableColumn(L("追跡先"), value: \.upstream).width(min: 100, ideal: 140)
             }.frame(minHeight: 200).accessibilityIdentifier("branchTable")
-            if !model.changes.isEmpty { Text("切り替える前に、作業中の変更をコミットまたは Stash してください。").foregroundStyle(.orange) }
+            if !model.changes.isEmpty { Text(L("切り替える前に、作業中の変更をコミットまたは Stash してください。")).foregroundStyle(.orange) }
             if let error { Text(error).foregroundStyle(.orange) }
             HStack {
-                Text("現在: " + model.branch).foregroundStyle(.secondary)
+                Text(L("現在: ") + model.branch).foregroundStyle(.secondary)
                 Spacer()
-                Button("\(model.chosenBranch) に切り替え") { let name = model.chosenBranch; model.operation { try $0.switchBranch(name) } }
+                Button(L("\(model.chosenBranch) に切り替え")) { let name = model.chosenBranch; model.operation { try $0.switchBranch(name) } }
                     .buttonStyle(.borderedProminent).disabled(model.chosenBranch.isEmpty || model.chosenBranch == model.branch || !model.changes.isEmpty)
             }
         }
@@ -120,6 +134,7 @@ struct BranchSelectionView: View {
 
 @MainActor
 struct CommitReferenceView: View {
+    @ObservedObject private var appearance = AppearanceSettings.shared
     let repo: GitRepository
     let reference: String
     var refreshKey = ""
@@ -128,8 +143,8 @@ struct CommitReferenceView: View {
     var body: some View {
         Group {
             if let commit { CommitInspector(repo: repo, commit: commit).id(commit.id) }
-            else if let error { BrowserPlaceholder(title: "コミットを読み込めませんでした", detail: error) }
-            else { ProgressView("コミットを読み込み中…").frame(maxWidth: .infinity, maxHeight: .infinity) }
+            else if let error { BrowserPlaceholder(title: L("コミットを読み込めませんでした"), detail: error) }
+            else { ProgressView(L("コミットを読み込み中…")).frame(maxWidth: .infinity, maxHeight: .infinity) }
         }.task(id: [repo.path, reference, refreshKey]) {
             error = nil
             do {
@@ -143,6 +158,7 @@ struct CommitReferenceView: View {
 
 @MainActor
 struct StashComparisonView: View {
+    @ObservedObject private var appearance = AppearanceSettings.shared
     let repo: GitRepository
     let reference: String
     @State private var commit: CommitRecord?
@@ -155,11 +171,11 @@ struct StashComparisonView: View {
                     Text(commit.subject).font(.headline)
                     Spacer()
                     if commit.parents.count > 2 {
-                        Picker("対象", selection: $untracked) { Text("追跡ファイル").tag(false); Text("未追跡ファイル").tag(true) }.pickerStyle(.segmented).frame(width: 230)
+                        Picker(L("対象"), selection: $untracked) { Text(L("追跡ファイル")).tag(false); Text(L("未追跡ファイル")).tag(true) }.pickerStyle(.segmented).frame(width: 230)
                     }
                 }.padding(10)
                 RevisionFilesView(repo: repo, base: untracked ? nil : commit.parents.first, target: untracked && commit.parents.count > 2 ? commit.parents[2] : commit.id)
-            } else if let error { BrowserPlaceholder(title: "退避内容を読み込めませんでした", detail: error) }
+            } else if let error { BrowserPlaceholder(title: L("退避内容を読み込めませんでした"), detail: error) }
             else { ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity) }
         }.task(id: reference) {
             commit = nil; error = nil

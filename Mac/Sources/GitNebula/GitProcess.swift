@@ -3,6 +3,7 @@ import Foundation
 /// All Git commands use argument arrays and a noninteractive process environment.
 /// Only executable discovery and process IO are platform specific.
 struct GitProcess {
+    struct Output: Sendable { let data: Data; let diagnostics: String }
     static var executable: String {
         let configured = UserDefaults.standard.string(forKey: "gitExecutable") ?? ""
         if !configured.isEmpty { return configured }
@@ -12,6 +13,9 @@ struct GitProcess {
         return "/usr/bin/git"
     }
     static func run(in path: String, arguments: [String], accepting statuses: Set<Int32> = [0], ssh: SSHConfiguration = .current) throws -> Data {
+        try runWithOutput(in: path, arguments: arguments, accepting: statuses, ssh: ssh).data
+    }
+    static func runWithOutput(in path: String, arguments: [String], accepting statuses: Set<Int32> = [0], ssh: SSHConfiguration = .current) throws -> Output {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         var environment = ProcessInfo.processInfo.environment
@@ -34,14 +38,15 @@ struct GitProcess {
         defer { try? stdout.close(); try? stderr.close() }
         process.standardOutput = stdout; process.standardError = stderr
         do { try process.run() }
-        catch { throw GitRepository(path: path).failure("Git を起動できません（\(executable)）。設定で Git の実行ファイルを確認してください。\n\(error.localizedDescription)") }
+        catch { throw GitRepository(path: path).failure(L("Git を起動できません（\(executable)）。設定で Git の実行ファイルを確認してください。\n\(error.localizedDescription)")) }
         process.waitUntilExit()
         let data = try Data(contentsOf: output)
+        let diagnostics = String(decoding: try Data(contentsOf: error), as: UTF8.self)
         guard statuses.contains(process.terminationStatus) else {
-            let details = String(decoding: data, as: UTF8.self) + String(decoding: try Data(contentsOf: error), as: UTF8.self)
-            let sshHint = details.contains("Permission denied (publickey)") || details.contains("Load key") || details.contains("Host key verification failed") ? "\n詳細設定の「SSH 認証」で秘密鍵とパスフレーズを確認してください。" : ""
-            throw GitRepository(path: path).failure("git \(arguments.first ?? "") が失敗しました（終了コード \(process.terminationStatus)）。\n\(details)\(sshHint)")
+            let details = String(decoding: data, as: UTF8.self) + diagnostics
+            let sshHint = details.contains("Permission denied (publickey)") || details.contains("Load key") || details.contains("Host key verification failed") ? L("\n詳細設定の「SSH 認証」で秘密鍵とパスフレーズを確認してください。") : ""
+            throw GitRepository(path: path).failure(L("git \(arguments.first ?? "") が失敗しました（終了コード \(process.terminationStatus)）。\n\(details)\(sshHint)"))
         }
-        return data
+        return Output(data: data, diagnostics: diagnostics)
     }
 }

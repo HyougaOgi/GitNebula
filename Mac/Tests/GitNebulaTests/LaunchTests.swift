@@ -3,7 +3,7 @@ import AppKit
 import SwiftUI
 @testable import GitNebula
 
-final class LaunchTests: XCTestCase {
+final class LaunchTests: LocalizedTestCase {
     @MainActor
     func testCloneNamesAlwaysFollowSourceAutomatically() throws {
         for source in ["https://example.invalid/team/星%20repo.git/?token=123#fragment", "git@example.invalid:team/星 repo.git", "ssh://git@example.invalid/team/星%20repo.git", "/tmp/星 repo.git/", "C:\\Projects\\星 repo.git"] {

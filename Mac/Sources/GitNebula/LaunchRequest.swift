@@ -2,61 +2,63 @@ import Foundation
 
 enum GitAction: String, CaseIterable, Sendable {
     case open, commit, diff, log, pull, push, fetch, switchBranch = "switch", clone, initialize = "init", stash, tags, remotes
-    case cherryPick = "cherry-pick", revert, rebase, merge, tools, workspace
+    case cherryPick = "cherry-pick", revert, rebase, merge, tools, workspace, graph
 
-    static let menuGroups: [(title: String, actions: [GitAction])] = [
-        ("変更", [.diff, .commit, .stash]),
-        ("履歴", [.log, .cherryPick, .revert]),
-        ("ブランチ", [.switchBranch, .merge, .rebase, .tags]),
-        ("リモート", [.fetch, .pull, .push, .remotes]),
-        ("リポジトリ", [.clone, .initialize, .workspace, .tools])
-    ]
+    static var menuGroups: [(title: String, actions: [GitAction])] { [
+        (L("変更"), [.commit, .diff, .stash]),
+        (L("履歴"), [.log, .graph, .cherryPick, .revert]),
+        (L("ブランチ"), [.switchBranch, .merge, .rebase, .tags]),
+        (L("リモート"), [.fetch, .pull, .push, .remotes]),
+        (L("リポジトリ"), [.clone, .initialize, .workspace, .tools])
+    ] }
     static var menuActions: [GitAction] { menuGroups.flatMap(\.actions) }
 
     var title: String {
         switch self {
         case .open: return "GitNebula"
-        case .commit: return "変更をコミット"
-        case .diff: return "差分一覧"
-        case .log: return "履歴を表示"
-        case .pull: return "変更を受信（Pull）"
-        case .push: return "変更を送信（Push）"
-        case .fetch: return "リモートを更新（Fetch）"
-        case .switchBranch: return "ブランチを切り替え"
-        case .clone: return "リポジトリを複製（Clone）"
-        case .initialize: return "リポジトリを作成（Init）"
-        case .stash: return "変更を退避（Stash）"
-        case .tags: return "タグを管理"
-        case .remotes: return "リモートを設定"
-        case .cherryPick: return "コミットを取り込む（Cherry-pick）"
-        case .revert: return "コミットを取り消す（Revert）"
-        case .rebase: return "ブランチの起点を移す（Rebase）"
-        case .merge: return "ブランチの変更を取り込む（Merge）"
-        case .tools: return "その他の機能"
-        case .workspace: return "リポジトリの管理"
+        case .commit: return "Commit"
+        case .diff: return L("差分一覧")
+        case .log: return L("履歴")
+        case .graph: return L("Git グラフ")
+        case .pull: return "Pull"
+        case .push: return "Push"
+        case .fetch: return "Fetch"
+        case .switchBranch: return L("ブランチを切り替え")
+        case .clone: return "Clone"
+        case .initialize: return L("リポジトリを作成（Init）")
+        case .stash: return "Stash"
+        case .tags: return L("タグを管理")
+        case .remotes: return L("リモートを設定")
+        case .cherryPick: return "Cherry-pick"
+        case .revert: return "Revert"
+        case .rebase: return "Rebase"
+        case .merge: return "Merge"
+        case .tools: return L("その他の機能")
+        case .workspace: return L("リポジトリの管理")
         }
     }
     var hint: String {
         switch self {
-        case .open: return "アプリの設定と起動オプションを管理します。"
-        case .commit: return "ファイルを確認して、メッセージを入力するだけ。"
-        case .diff: return "変更ファイルの一覧です。ファイルを開くと、その差分を表示します。"
-        case .log: return "コミットの一覧・説明・変更ファイルを表示します。"
-        case .pull: return "リモートの変更を現在のブランチに取り込みます（fast-forward のみ）。"
-        case .push: return "現在のブランチのコミットをリモートに送信します。"
-        case .fetch: return "リモートの最新情報を取得します。作業ファイルは変更しません。"
-        case .switchBranch: return "切り替え先を選んで実行します。未コミットの変更がある場合は停止します。"
-        case .clone: return "保存先の中に、リポジトリ名のフォルダを作って複製します。"
-        case .initialize: return "選択したフォルダに新しい Git リポジトリを作成します。"
-        case .stash: return "変更を一時保存し、後で作業ツリーに戻します。"
-        case .tags: return "リリースなどの目印をコミットに付けます。"
-        case .remotes: return "取得・送信先の URL を登録・変更します。"
-        case .cherryPick: return "履歴からコミットを選び、現在のブランチに変更を取り込みます。"
-        case .revert: return "履歴からコミットを選び、変更を打ち消す新しいコミットを作ります。"
-        case .rebase: return "現在のブランチのコミットを選んだブランチの上につなぎ直します。"
-        case .merge: return "選んだブランチの変更を現在のブランチに取り込みます。"
-        case .tools: return "履歴・ファイルの確認、履歴編集、パッチ、Worktree、Submodule の専用画面を開きます。"
-        case .workspace: return "作業ファイル・ブランチ・競合解決・設定の画面を開きます。"
+        case .open: return L("アプリの設定と起動オプションを管理します。")
+        case .commit: return L("ファイルを確認して、メッセージを入力するだけ。")
+        case .diff: return L("変更ファイルの一覧です。ファイルを開くと、その差分を表示します。")
+        case .log: return L("コミットの一覧・説明・変更ファイルを表示します。")
+        case .graph: return L("ブランチの分岐・合流とコミットを表示します。")
+        case .pull: return L("リモートの変更を現在のブランチに取り込みます（fast-forward のみ）。")
+        case .push: return L("現在のブランチのコミットをリモートに送信します。")
+        case .fetch: return L("リモートの最新情報を取得します。作業ファイルは変更しません。")
+        case .switchBranch: return L("切り替え先を選んで実行します。未コミットの変更がある場合は停止します。")
+        case .clone: return L("保存先の中に、リポジトリ名のフォルダを作って複製します。")
+        case .initialize: return L("選択したフォルダに新しい Git リポジトリを作成します。")
+        case .stash: return L("変更を一時保存し、後で作業ツリーに戻します。")
+        case .tags: return L("リリースなどの目印をコミットに付けます。")
+        case .remotes: return L("取得・送信先の URL を登録・変更します。")
+        case .cherryPick: return L("履歴からコミットを選び、現在のブランチに変更を取り込みます。")
+        case .revert: return L("履歴からコミットを選び、変更を打ち消す新しいコミットを作ります。")
+        case .rebase: return L("現在のブランチのコミットを選んだブランチの上につなぎ直します。")
+        case .merge: return L("選んだブランチの変更を現在のブランチに取り込みます。")
+        case .tools: return L("履歴・ファイルの確認、履歴編集、パッチ、Worktree、Submodule の専用画面を開きます。")
+        case .workspace: return L("作業ファイル・ブランチ・競合解決・設定の画面を開きます。")
         }
     }
     var symbol: String {
@@ -64,6 +66,7 @@ enum GitAction: String, CaseIterable, Sendable {
         case .commit: return "checkmark.circle"
         case .diff: return "doc.text.magnifyingglass"
         case .log: return "clock.arrow.circlepath"
+        case .graph: return "point.3.connected.trianglepath.dotted"
         case .pull: return "arrow.down.circle"
         case .push: return "arrow.up.circle"
         case .fetch: return "arrow.clockwise"
@@ -121,7 +124,7 @@ struct LaunchRequest: Sendable {
         return LaunchRequest(action: action, paths: paths)
     }
     static func invalid() -> NSError {
-        NSError(domain: "GitNebula", code: 1, userInfo: [NSLocalizedDescriptionKey: "起動引数が不正です。--action commit --path /path/to/repo の形式で指定してください。"])
+        NSError(domain: "GitNebula", code: 1, userInfo: [NSLocalizedDescriptionKey: L("起動引数が不正です。--action commit --path /path/to/repo の形式で指定してください。")])
     }
     func includes(_ file: String, root: String) -> Bool {
         if paths.isEmpty { return true }
@@ -154,7 +157,7 @@ struct LaunchRequest: Sendable {
         if path.hasPrefix("file://"), let url = URL(string: path), url.isFileURL { path = url.path }
         path = NSString(string: path).expandingTildeInPath
         guard path.hasPrefix("/"), !path.contains("\0") else {
-            throw NSError(domain: "GitNebula", code: 1, userInfo: [NSLocalizedDescriptionKey: "フォルダの絶対パスを入力してください（例: ~/Projects/my-repo）。"])
+            throw NSError(domain: "GitNebula", code: 1, userInfo: [NSLocalizedDescriptionKey: L("フォルダの絶対パスを入力してください（例: ~/Projects/my-repo）。")])
         }
         return URL(fileURLWithPath: path).standardizedFileURL.path
     }

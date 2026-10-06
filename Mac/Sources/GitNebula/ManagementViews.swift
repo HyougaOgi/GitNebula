@@ -1,13 +1,14 @@
 import SwiftUI
 
 struct FunctionLauncher: View {
+    @ObservedObject private var appearance = AppearanceSettings.shared
     let management: Bool
     @Environment(\.screenActions) private var navigation
     private var groups: [(String, [RepositoryTool])] {
         [
-            ("履歴・ファイルの確認", [.show, .compare, .fileLog, .blame, .reflog]),
-            ("履歴への操作", [.cherryPick, .revert, .rebase, .resetSoft, .resetMixed, .resetHard]),
-            ("パッチ", [.exportPatch, .checkPatch, .applyPatch]),
+            (L("履歴・ファイルの確認"), [.show, .compare, .fileLog, .blame, .reflog]),
+            (L("履歴への操作"), [.cherryPick, .revert, .rebase, .resetSoft, .resetMixed, .resetHard]),
+            (L("パッチ"), [.exportPatch, .checkPatch, .applyPatch]),
             ("Worktree", [.listWorktrees, .addWorktree]),
             ("Submodule", [.listSubmodules, .addSubmodule, .updateSubmodules])
         ]
@@ -24,7 +25,7 @@ struct FunctionLauncher: View {
                             }.frame(maxWidth: .infinity, alignment: .leading).padding(10)
                         }.buttonStyle(.bordered)
                     }
-                    Button("リモートを設定") { navigation.openAction(.remotes) }
+                    Button(L("リモートを設定")) { navigation.openAction(.remotes) }
                     Button(UtilityPage.identity.title) { navigation.openUtility(.identity) }
                 } else {
                     ForEach(groups, id: \.0) { title, tools in
@@ -44,17 +45,18 @@ struct FunctionLauncher: View {
 }
 
 struct IdentitySettingsView: View {
+    @ObservedObject private var appearance = AppearanceSettings.shared
     @ObservedObject var model: Workspace
     @State private var name = ""
     @State private var email = ""
     @State private var loaded = false
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("名前"); TextField("コミット作成者の名前", text: $name).textFieldStyle(.roundedBorder)
-            Text("メールアドレス"); TextField("コミット作成者のメールアドレス", text: $email).textFieldStyle(.roundedBorder)
-            Button("作成者を保存") {
+            Text(L("名前")); TextField(L("コミット作成者の名前"), text: $name).textFieldStyle(.roundedBorder)
+            Text(L("メールアドレス")); TextField(L("コミット作成者のメールアドレス"), text: $email).textFieldStyle(.roundedBorder)
+            Button(L("作成者を保存")) {
                 let name = name, email = email
-                model.operation(success: "コミット作成者を保存しました。") { try $0.setIdentity(name: name, email: email) }
+                model.operation(success: L("コミット作成者を保存しました。")) { try $0.setIdentity(name: name, email: email) }
             }.buttonStyle(.borderedProminent).disabled(!loaded || name.isEmpty || email.isEmpty)
             Spacer()
         }.task {

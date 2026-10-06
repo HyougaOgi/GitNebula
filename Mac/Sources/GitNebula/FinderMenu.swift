@@ -4,8 +4,8 @@ import FinderSync
 // Finder transports menu items across a process boundary. The action sender is
 // a copy: use its integer tag, not representedObject or object identity.
 final class FinderMenu {
-    static let cloneHereTitle = "この階層にリポジトリを複製（Clone）…"
-    static let cloneInSelectionTitle = "選択フォルダ内に Clone…"
+    static var cloneHereTitle: String { L("この階層に Clone…") }
+    static var cloneInSelectionTitle: String { L("選択フォルダ内に Clone…") }
     private var nextTag = 1
     private var requests: [[Int: LaunchRequest]] = []
 
@@ -51,6 +51,9 @@ final class FinderMenu {
         }
         for (index, group) in GitAction.menuGroups.enumerated() {
             if index > 0 { actions.addItem(.separator()) }
+            let heading = NSMenuItem(title: group.title, action: nil, keyEquivalent: "")
+            heading.isEnabled = false
+            actions.addItem(heading)
             for action in group.actions {
                 if action == .clone, let cloneParent {
                     add(action, title: Self.cloneHereTitle, paths: [cloneParent])
@@ -72,7 +75,7 @@ final class FinderMenu {
     func request(for item: NSMenuItem) throws -> LaunchRequest {
         guard let request = requests.reversed().compactMap({ $0[item.tag] }).first else {
             throw NSError(domain: "GitNebula", code: 1, userInfo: [NSLocalizedDescriptionKey:
-                "選択した操作を取得できませんでした。Finder の右クリックメニューを開き直してください。"])
+                L("選択した操作を取得できませんでした。Finder の右クリックメニューを開き直してください。")])
         }
         return request
     }

@@ -15,16 +15,18 @@ stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 bundle="$stage/GitNebula.app"
 extension="$bundle/Contents/PlugIns/GitNebulaFinder.appex"
-mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources" "$extension/Contents/MacOS" "$output"
+mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources" "$extension/Contents/MacOS" "$extension/Contents/Resources" "$output"
 xcrun swift make-icon.swift "$stage/GitNebula.iconset"
 iconutil -c icns "$stage/GitNebula.iconset" -o "$bundle/Contents/Resources/GitNebula.icns"
 cp "$binary_dir/GitNebula" "$bundle/Contents/MacOS/"
 cp Info.plist "$bundle/Contents/"
 cp FinderExtension/Info.plist "$extension/Contents/"
-xcrun swiftc -parse-as-library -emit-executable -module-name GitNebulaFinder \
+cp Sources/GitNebula/Resources/en.json "$bundle/Contents/Resources/"
+cp Sources/GitNebula/Resources/en.json "$extension/Contents/Resources/"
+xcrun swiftc -parse-as-library -emit-executable -module-name GitNebulaFinder -D FINDER_EXTENSION \
   -target "$(uname -m)-apple-macosx13.0" -framework Cocoa -framework FinderSync \
   -Xlinker -e -Xlinker _NSExtensionMain \
-  FinderExtension/FinderSync.swift Sources/GitNebula/LaunchRequest.swift Sources/GitNebula/FinderMenu.swift -o "$extension/Contents/MacOS/GitNebulaFinder"
+  FinderExtension/FinderSync.swift Sources/GitNebula/LaunchRequest.swift Sources/GitNebula/FinderMenu.swift Sources/GitNebula/Localization.swift -o "$extension/Contents/MacOS/GitNebulaFinder"
 if [[ "$release_mode" == --signed ]]; then
   codesign --force --options runtime --timestamp --sign "$MACOS_SIGNING_IDENTITY" --entitlements FinderExtension/entitlements.plist "$extension"
   codesign --force --options runtime --timestamp --sign "$MACOS_SIGNING_IDENTITY" "$bundle"

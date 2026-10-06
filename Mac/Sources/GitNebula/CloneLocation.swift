@@ -18,7 +18,7 @@ enum CloneLocation {
     static func destination(parent: String, source: String) throws -> String {
         let folder = repositoryName(for: source)
         guard !folder.isEmpty, folder != ".", folder != "..", !folder.contains("/"), !folder.contains("\\"), !folder.contains("\0") else {
-            throw NSError(domain: "GitNebula", code: 1, userInfo: [NSLocalizedDescriptionKey: "取得元からリポジトリ名を取得できません。取得元の URL / パスを確認してください。"])
+            throw NSError(domain: "GitNebula", code: 1, userInfo: [NSLocalizedDescriptionKey: L("取得元からリポジトリ名を取得できません。取得元の URL / パスを確認してください。")])
         }
         return URL(fileURLWithPath: try LaunchRequest.inputPath(parent)).appendingPathComponent(folder).path
     }

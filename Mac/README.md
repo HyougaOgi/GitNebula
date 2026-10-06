@@ -14,19 +14,25 @@ bash Mac/install.sh
 
 For packaging only, run `bash Mac/package.sh --unsigned`. The package is written to `dist/mac/GitNebula-unsigned.zip`. Development packages use an ad-hoc signature, not a trusted Developer ID signature.
 
-## Welcome and residence
+## App screen and residence
 
 Normal startup and reopening the app keep it in the menu bar with no Dock icon or window. The icon menu contains **GitNebula を開く**, **詳細設定…**, **起動オプション** and **GitNebula を終了**. Startup options include **ログイン時に自動起動** (using macOS login items) and **起動時にアプリ画面を開く** (off by default). Login-item registration errors and required system approval are displayed; opening login-item settings is available from both the menu and detailed settings.
 
 **GitNebula を開く** shows a simple app screen with the detailed-settings entry. Repository selection, Clone, Init and recent repositories are not shown there. The resident menu contains no Git operations without a folder context. Finder context-menu actions open their dedicated screen even when the app has no window. Close hides the window by default. Git operations are grouped in the same order in Finder and the app: changes, history, branches, remotes, repository.
 
-Detailed settings include **SSH 認証**: select a readable private key (not its `.pub` file), enter its passphrase if encrypted, and click **SSH 設定を保存**. The path is saved in app preferences; the passphrase is saved separately in macOS Keychain and automatically provided only to that key's passphrase prompt for Clone/Fetch/Pull/Push. A blank passphrase preserves its saved value; **保存したパスフレーズを削除** removes it. A blank key path uses existing SSH configuration/agent. Unsaved passphrases can be entered at connection time. A new host still requires confirmation of the displayed SSH fingerprint. HTTPS continues using Git's credential helper.
+Detailed settings include **SSH 認証**: select a readable private key (not its `.pub` file), enter its passphrase if encrypted, and click **SSH 設定を保存**. The path is saved in app preferences; the passphrase is saved separately in macOS Keychain and automatically provided only to that key's passphrase prompt for Clone/Fetch/Pull/Push. Saved passphrases stay filled and masked when settings reopen. Clearing the field alone preserves its saved value; **保存したパスフレーズを削除** removes it. A blank key path uses existing SSH configuration/agent. Unsaved passphrases can be entered at connection time. A new host still requires confirmation of the displayed SSH fingerprint. HTTPS continues using Git's credential helper.
 
 Cherry-pick and Revert each open a dedicated commit selector with an execute button and confirmation. Rebase and Merge each open a dedicated branch selector. These screens contain no working-file diff list. A welcome or Finder request during a Git operation waits for completion before changing screens. Unstage accepts mixed selections and removes only staged changes, preserving working and untracked files. Push explains when an initial commit or branch selection is required.
 
+Detailed settings also include a **Transparency** slider (0–80%), **System / Light / Dark** appearance, and **System / Japanese / English** language. Changes apply immediately and persist. The macOS slider changes the window background while keeping text and controls opaque. Home uses the animated Nebula icon and independently twinkling stars. Animation pauses while the window is hidden and respects Reduce Motion.
+
+**履歴 → Git グラフ** shows colored branch lanes, merge parents, commit IDs, messages and branch/tag labels. Select a commit and use **コミットを開く**, or double-click it, to view changed files. More history can be loaded in pages of 200.
+
+Pull reports whether it updated the repository or was already current, including commit/file counts and before/after HEAD. Fetch and Push also retain their result and Git output. **戻る** follows the screens actually opened, including Settings and Home, and preserves commit drafts.
+
 ## Opening a repository
 
-Type or paste an absolute path, `~/Projects/my-repo`, or a local `file://` URL into **リポジトリのパス**, then press Enter or **開く**. **参照…** opens the native folder picker. Quoted paths containing spaces are accepted. The path remains editable after a failed attempt. The app activates as a regular macOS application even when started with `swift run`.
+Type or paste an absolute path, `~/Projects/my-repo`, or a local `file://` URL into **リポジトリのパス**, then press Enter or **開く**. **参照…** opens the native folder picker. Quoted paths containing spaces are accepted. The path remains editable after a failed attempt. The app stays a menu-bar application when started with `swift run`.
 
 To create a repository in an existing folder, choose **リポジトリを作成（Init）**. The new Stash, Tag, remote/identity settings, history editing, Blame, patch, Worktree and Submodule tools are described in the [feature matrix](../shared/FEATURES.md).
 
@@ -34,7 +40,7 @@ To create a repository in an existing folder, choose **リポジトリを作成�
 
 **差分一覧** opens only a changed-files table, with relative paths, change status and staging status. Filter by path or click a column heading to sort. A single click selects a row. Double-click, press Enter, or choose **差分を開く** to navigate to the selected file's read-only comparison in the same window. This also applies when Finder selects just one file.
 
-The **ファイル差分** screen contains only the two versions of that file: HEAD on the left and the working file on the right for uncommitted changes. Both panes show line numbers, aligned insertions/deletions, change colors and synchronized vertical scrolling. The arrows jump between changes. **戻る** (⌘[) returns to the retained list, preserving its selection, filter and scroll position. **変更をコミット** contains only file checkboxes, a message and the commit action; navigating to a comparison preserves those drafts.
+The **ファイル差分** screen contains only the two versions of that file: HEAD on the left and the working file on the right for uncommitted changes. Both panes show line numbers, aligned insertions/deletions, change colors and synchronized vertical scrolling. The arrows jump between changes. **戻る** (⌘[) returns to the retained list, preserving its selection, filter and scroll position. **Commit** is directly available in the working-screen header and first in the Changes menu. It contains only file checkboxes, a message and the commit action; navigating to a comparison preserves those drafts.
 
 **履歴を表示** opens a selectable commit table with message, author, date, ID, branch and tag labels. Selecting a commit loads its message and changed files; opening a file navigates to a comparison of that commit with its parent. The history screen itself contains the commit table, message and changed-files table, without inline file contents. Merge commits offer a parent selector, and the first commit is compared with an empty tree. Search filters the loaded commits by message, author, email, ID or decoration. The initial page contains up to 200 commits; **さらに 200 件読み込む** extends the list. The branch selector limits the history to a branch or HEAD.
 
@@ -62,7 +68,7 @@ open -a GitNebula --args --action clone --path /path/to/parent-folder
 
 After upgrading, quit the previous app, run the installer again, and toggle the Finder extension off and on if Finder still shows the old menu. A GitNebula toolbar button is also available from Finder's toolbar customization.
 
-Clone uses a parent directory and creates a child folder named after the source repository. Existing files in the parent are preserved. The form only asks for the source and parent directory; the repository name is automatic, and the complete destination is shown for confirmation. Finder’s **この階層にリポジトリを複製（Clone）…** uses the directory containing the clicked row, so list-view clicks do not redirect Clone into an unrelated folder. **選択フォルダ内に Clone…** explicitly uses the selected folder. Background and sidebar menus use their targeted folder. The picker opens at the current parent. An occupied child destination is rejected without overwriting it.
+Clone uses a parent directory and creates a child folder named after the source repository. Existing files in the parent are preserved. The form only asks for the source and parent directory; the repository name is automatic, and the complete destination is shown for confirmation. Finder’s **この階層に Clone…** uses the directory containing the clicked row, so list-view clicks do not redirect Clone into an unrelated folder. **選択フォルダ内に Clone…** explicitly uses the selected folder. Background and sidebar menus use their targeted folder. The picker opens at the current parent. An occupied child destination is rejected without overwriting it.
 
 Disable the extension in System Settings before removing the application. `swift run` runs the development executable and does not install the Finder extension.
 

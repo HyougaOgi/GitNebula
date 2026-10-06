@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $installer = Join-Path $PSScriptRoot '../../Windows/Install-ContextMenu.ps1'
 $exe = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../Windows/bin/Debug/net8.0-windows/GitNebula.exe'))
-$expected = @('diff', 'commit', 'stash', 'files', 'log', 'cherry-pick', 'revert', 'switch', 'merge', 'rebase', 'branches', 'conflicts', 'tags', 'fetch', 'pull', 'push', 'remotes', 'clone', 'workspace', 'identity')
+$expected = @('commit', 'diff', 'stash', 'files', 'log', 'graph', 'cherry-pick', 'revert', 'switch', 'merge', 'rebase', 'branches', 'conflicts', 'tags', 'fetch', 'pull', 'push', 'remotes', 'clone', 'workspace', 'identity')
 $roots = @('HKCU:\Software\Classes\Directory\shell\GitNebula', 'HKCU:\Software\Classes\Directory\Background\shell\GitNebula', 'HKCU:\Software\Classes\*\shell\GitNebula')
 foreach ($root in $roots) { if (Test-Path -LiteralPath $root) { throw 'Run this integration test in a clean user profile; an existing GitNebula installation was found.' } }
 try {

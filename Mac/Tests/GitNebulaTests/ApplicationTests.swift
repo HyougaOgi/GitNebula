@@ -2,7 +2,7 @@ import XCTest
 import AppKit
 @testable import GitNebula
 
-final class ApplicationTests: XCTestCase {
+final class ApplicationTests: LocalizedTestCase {
     @MainActor
     func testCloseReopenAndFinderUseOneWindowAndShowHome() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("resident 星 " + UUID().uuidString)
@@ -51,10 +51,10 @@ final class ApplicationTests: XCTestCase {
         XCTAssertTrue(window.isVisible)
         XCTAssertEqual(delegate.navigation.current?.model?.action, .open)
         XCTAssertTrue(delegate.window === window, "Reopen must not create another window")
-        // Home's snapshot refresh is asynchronous; let it finish before releasing the repository.
+        // Wait for queued navigation before releasing the repository.
         let refreshDeadline = Date().addingTimeInterval(20)
         while delegate.navigation.busy && Date() < refreshDeadline { try await Task.sleep(nanoseconds: 50_000_000) }
         XCTAssertFalse(delegate.navigation.busy)
-        XCTAssertEqual(delegate.model.request(for: .commit).paths, [repo.path], "Home must adopt the Finder repository, including its request context")
+        XCTAssertEqual(delegate.navigation.request(for: .commit).paths, [repo.path], "Home must adopt the Finder repository, including its request context")
     }
 }

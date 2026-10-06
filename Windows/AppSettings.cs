@@ -5,6 +5,10 @@ public sealed class AppSettings
 {
     private static readonly string FilePath = Environment.GetEnvironmentVariable("GITNEBULA_SETTINGS_PATH") ?? System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GitNebula", "settings.json");
     public static AppSettings Current { get; } = Load();
+    public string Theme { get; set; } = "system";
+    public string Language { get; set; } = "system";
+    public double Transparency { get; set; }
+    public bool ShowHomeOnLaunch { get; set; }
     public bool KeepRunning { get; set; } = true;
     public string GitExecutable { get; set; } = "";
     public string SshKeyPath { get; set; } = "";

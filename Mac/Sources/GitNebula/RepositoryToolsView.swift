@@ -6,57 +6,57 @@ enum RepositoryTool: String, CaseIterable {
     case exportPatch, checkPatch, applyPatch, listWorktrees, addWorktree, listSubmodules, addSubmodule, updateSubmodules
     var title: String {
         switch self {
-        case .show: return "コミットの内容"
-        case .compare: return "2 つのコミットを比較"
-        case .blame: return "行ごとの変更者（Blame）"
-        case .fileLog: return "ファイルの履歴"
-        case .reflog: return "参照の操作履歴（Reflog）"
-        case .cherryPick: return "コミットを取り込む（Cherry-pick）"
-        case .revert: return "打ち消しコミットを作る（Revert）"
-        case .rebase: return "ブランチの起点を移す（Rebase）"
-        case .resetSoft: return "Reset — 変更をステージに残す"
-        case .resetMixed: return "Reset — 変更を作業ツリーに残す"
-        case .resetHard: return "Reset — 対象コミットの内容に戻す"
-        case .exportPatch: return "変更をパッチに保存"
-        case .checkPatch: return "パッチの適用を確認"
-        case .applyPatch: return "パッチを適用"
-        case .listWorktrees: return "作業ツリーの一覧（Worktree）"
-        case .addWorktree: return "別の作業ツリーを作成"
-        case .listSubmodules: return "サブモジュールの一覧"
-        case .addSubmodule: return "サブモジュールを追加"
-        case .updateSubmodules: return "サブモジュールを取得・更新"
+        case .show: return L("コミットの内容")
+        case .compare: return L("2 つのコミットを比較")
+        case .blame: return L("行ごとの変更者（Blame）")
+        case .fileLog: return L("ファイルの履歴")
+        case .reflog: return L("参照の操作履歴（Reflog）")
+        case .cherryPick: return L("コミットを取り込む（Cherry-pick）")
+        case .revert: return L("打ち消しコミットを作る（Revert）")
+        case .rebase: return L("ブランチの起点を移す（Rebase）")
+        case .resetSoft: return L("Reset — 変更をステージに残す")
+        case .resetMixed: return L("Reset — 変更を作業ツリーに残す")
+        case .resetHard: return L("Reset — 対象コミットの内容に戻す")
+        case .exportPatch: return L("変更をパッチに保存")
+        case .checkPatch: return L("パッチの適用を確認")
+        case .applyPatch: return L("パッチを適用")
+        case .listWorktrees: return L("作業ツリーの一覧（Worktree）")
+        case .addWorktree: return L("別の作業ツリーを作成")
+        case .listSubmodules: return L("サブモジュールの一覧")
+        case .addSubmodule: return L("サブモジュールを追加")
+        case .updateSubmodules: return L("サブモジュールを取得・更新")
         }
     }
     var fields: [String] {
         switch self {
-        case .show, .cherryPick, .revert, .rebase, .resetSoft, .resetMixed, .resetHard: return ["コミット / ブランチ / タグ"]
-        case .compare: return ["比較元のコミット", "比較先のコミット"]
-        case .blame: return ["リポジトリ内のファイルパス", "コミット / ブランチ / タグ"]
-        case .fileLog: return ["リポジトリ内のファイルパス"]
-        case .exportPatch: return ["パッチの保存先（絶対パス）"]
-        case .checkPatch, .applyPatch: return ["パッチのファイル（絶対パス）"]
-        case .addWorktree: return ["作成先のフォルダ（絶対パス）", "新しいブランチ名"]
-        case .addSubmodule: return ["取得元 URL", "リポジトリ内の作成先"]
+        case .show, .cherryPick, .revert, .rebase, .resetSoft, .resetMixed, .resetHard: return [L("コミット / ブランチ / タグ")]
+        case .compare: return [L("比較元のコミット"), L("比較先のコミット")]
+        case .blame: return [L("リポジトリ内のファイルパス"), L("コミット / ブランチ / タグ")]
+        case .fileLog: return [L("リポジトリ内のファイルパス")]
+        case .exportPatch: return [L("パッチの保存先（絶対パス）")]
+        case .checkPatch, .applyPatch: return [L("パッチのファイル（絶対パス）")]
+        case .addWorktree: return [L("作成先のフォルダ（絶対パス）"), L("新しいブランチ名")]
+        case .addSubmodule: return [L("取得元 URL"), L("リポジトリ内の作成先")]
         default: return []
         }
     }
     var hint: String {
         switch self {
-        case .resetSoft, .resetMixed, .resetHard: return "現在のブランチを指定したコミットに移します。先に作業中の変更をコミットまたは退避してください。"
-        case .cherryPick, .revert, .rebase: return "作業ツリーがクリーンな場合に実行します。競合が起きたら解決して再開、または中止できます。"
-        case .exportPatch: return "HEAD からの追跡済みファイルの差分を、バイナリ差分も含めて保存します。新規ファイルは先にステージしてください。"
-        case .updateSubmodules: return "親リポジトリに記録されたコミットを取得します。サブモジュールのローカル変更は強制破棄しません。"
-        default: return "下の欄で対象を指定してください。結果はこの画面に表示されます。"
+        case .resetSoft, .resetMixed, .resetHard: return L("現在のブランチを指定したコミットに移します。先に作業中の変更をコミットまたは退避してください。")
+        case .cherryPick, .revert, .rebase: return L("作業ツリーがクリーンな場合に実行します。競合が起きたら解決して再開、または中止できます。")
+        case .exportPatch: return L("HEAD からの追跡済みファイルの差分を、バイナリ差分も含めて保存します。新規ファイルは先にステージしてください。")
+        case .updateSubmodules: return L("親リポジトリに記録されたコミットを取得します。サブモジュールのローカル変更は強制破棄しません。")
+        default: return L("下の欄で対象を指定してください。結果はこの画面に表示されます。")
         }
     }
     var confirmation: String? {
         switch self {
-        case .resetHard: return "現在のブランチと追跡ファイルを対象コミットに戻します。ブランチから外れるコミットを確認してください。"
-        case .resetSoft, .resetMixed: return "現在のブランチを対象コミットへ移します。ブランチの履歴が変わります。"
-        case .rebase: return "現在のブランチのコミットを、新しい起点に付け替えます。コミット ID が変わります。"
-        case .cherryPick: return "指定したコミットの変更を現在のブランチに取り込みます。"
-        case .revert: return "指定したコミットを打ち消す新しいコミットを作成します。"
-        case .applyPatch: return "パッチを現在の作業ツリーに適用します。"
+        case .resetHard: return L("現在のブランチと追跡ファイルを対象コミットに戻します。ブランチから外れるコミットを確認してください。")
+        case .resetSoft, .resetMixed: return L("現在のブランチを対象コミットへ移します。ブランチの履歴が変わります。")
+        case .rebase: return L("現在のブランチのコミットを、新しい起点に付け替えます。コミット ID が変わります。")
+        case .cherryPick: return L("指定したコミットの変更を現在のブランチに取り込みます。")
+        case .revert: return L("指定したコミットを打ち消す新しいコミットを作成します。")
+        case .applyPatch: return L("パッチを現在の作業ツリーに適用します。")
         default: return nil
         }
     }
@@ -74,7 +74,7 @@ enum RepositoryTool: String, CaseIterable {
         case .resetMixed: try repo.reset(first, mode: "mixed")
         case .resetHard: try repo.reset(first, mode: "hard")
         case .exportPatch: try repo.exportPatch(to: first)
-        case .checkPatch: try repo.applyPatch(first, checkOnly: true); return "適用可能なパッチです。作業ファイルは変更していません。"
+        case .checkPatch: try repo.applyPatch(first, checkOnly: true); return L("適用可能なパッチです。作業ファイルは変更していません。")
         case .applyPatch: try repo.applyPatch(first, checkOnly: false)
         case .listWorktrees: return try repo.worktrees()
         case .addWorktree: try repo.addWorktree(at: first, branch: second); return try repo.worktrees()
@@ -82,12 +82,13 @@ enum RepositoryTool: String, CaseIterable {
         case .addSubmodule: try repo.addSubmodule(source: first, destination: second); return try repo.submodules()
         case .updateSubmodules: try repo.updateSubmodules(); return try repo.submodules()
         }
-        return "完了しました。"
+        return L("完了しました。")
     }
 }
 
 @MainActor
 struct RepositoryToolsView: View {
+    @ObservedObject private var appearance = AppearanceSettings.shared
     @ObservedObject var model: Workspace
     @Environment(\.screenActions) private var navigation
     let tool: RepositoryTool
@@ -162,17 +163,17 @@ struct RepositoryToolsView: View {
             case .reflog: RepositoryRecordsView(repo: repo, kind: .reflog, refreshKey: model.revisionID.uuidString)
             case .listWorktrees, .addWorktree: RepositoryRecordsView(repo: repo, kind: .worktrees, refreshKey: model.revisionID.uuidString)
             case .listSubmodules, .addSubmodule, .updateSubmodules: RepositoryRecordsView(repo: repo, kind: .submodules, refreshKey: model.revisionID.uuidString)
-            default: BrowserPlaceholder(title: "対象と操作結果を確認", detail: "上のフォームで対象を指定して実行します。", symbol: "wrench.and.screwdriver")
+            default: BrowserPlaceholder(title: L("対象と操作結果を確認"), detail: L("上のフォームで対象を指定して実行します。"), symbol: "wrench.and.screwdriver")
             }
-        } else { BrowserPlaceholder(title: "対象を指定してください", detail: "上の入力欄で対象を指定し、実行ボタンを押してください。", symbol: "wrench.and.screwdriver") }
+        } else { BrowserPlaceholder(title: L("対象を指定してください"), detail: L("上の入力欄で対象を指定し、実行ボタンを押してください。"), symbol: "wrench.and.screwdriver") }
     }
     private var remoteSettings: some View {
         HSplitView {
             VStack(alignment: .leading, spacing: 10) {
-                Text("登録済みリモート").font(.headline)
+                Text(L("登録済みリモート")).font(.headline)
                 List(model.remotes, id: \.self, selection: $selectedRemote) { name in Label(name, systemImage: "network").tag(name) }
                     .frame(minHeight: 160).accessibilityIdentifier("remoteList")
-                Button("新しいリモート") { selectedRemote = nil; remoteName = ""; remoteURL = "" }
+                Button(L("新しいリモート")) { selectedRemote = nil; remoteName = ""; remoteURL = "" }
             }.frame(minWidth: 160, idealWidth: 190, maxWidth: 240)
             ScrollView { remoteForm.padding(.leading, 12) }.frame(minWidth: 400)
         }
@@ -192,8 +193,8 @@ struct RepositoryToolsView: View {
     }
     private func confirm(_ message: String, run: () -> Void) {
         let alert = NSAlert(); alert.messageText = message; alert.alertStyle = .warning
-        alert.informativeText = "リポジトリ: \(model.repository?.path ?? "")\nブランチ: \(model.branch)"
-        alert.addButton(withTitle: "実行"); alert.addButton(withTitle: "キャンセル")
+        alert.informativeText = L("リポジトリ: \(model.repository?.path ?? "")\nブランチ: \(model.branch)")
+        alert.addButton(withTitle: L("実行")); alert.addButton(withTitle: L("キャンセル"))
         if alert.runModal() == .alertFirstButtonReturn { run() }
     }
     private func execute(_ work: @escaping @Sendable (GitRepository) throws -> String) {
@@ -201,21 +202,21 @@ struct RepositoryToolsView: View {
         model.perform({
             let result = try work(repo)
             return (try Snapshot.afterOperation(repo), result)
-        }, success: "完了しました。", notifiesChanges: true) { snapshot, result in
+        }, success: L("完了しました。"), notifiesChanges: true) { snapshot, result in
             model.apply(snapshot); output = result
         }
     }
     private func refresh() { model.refresh() }
     private var stashForm: some View {
         VStack(alignment: .leading, spacing: 12) {
-            field("退避メモ", $stashMessage)
-            Toggle("未追跡ファイルも退避する（無視ファイルは含めない）", isOn: $includeUntracked)
-            Button("現在の変更を退避") {
+            field(L("退避メモ"), $stashMessage)
+            Toggle(L("未追跡ファイルも退避する（無視ファイルは含めない）"), isOn: $includeUntracked)
+            Button(L("現在の変更を退避")) {
                 let message = stashMessage, include = includeUntracked
-                execute { try $0.saveStash(message, includeUntracked: include); return "変更を退避しました。" }
+                execute { try $0.saveStash(message, includeUntracked: include); return L("変更を退避しました。") }
             }.disabled(model.changes.isEmpty || model.sequence != nil).buttonStyle(.borderedProminent)
             Divider()
-            if stashes.isEmpty { Text("退避データはありません。") }
+            if stashes.isEmpty { Text(L("退避データはありません。")) }
             else {
                 List(selection: Binding(get: { Optional(stashID) }, set: { stashID = $0 ?? "" })) {
                     ForEach(stashes) { entry in
@@ -227,60 +228,60 @@ struct RepositoryToolsView: View {
                 }.frame(minHeight: 200, maxHeight: .infinity).accessibilityIdentifier("stashList")
                 Text(stashes.first { $0.id == stashID }?.title ?? "").font(.callout).textSelection(.enabled)
                 HStack {
-                    Button("変更ファイル一覧") {
+                    Button(L("変更ファイル一覧")) {
                         if let repo = model.repository { navigation.openRevision(repo, stashID, true) }
                     }.accessibilityIdentifier("openStashFiles")
-                    Button("適用（退避を残す）") { let id = stashID; execute { try $0.applyStash(id); return "適用しました。退避データは残っています。" } }
-                    Button("取り出す（Pop）") { let id = stashID; execute { try $0.applyStash(id, pop: true); return "退避を取り出しました。" } }
-                    Button("削除") { let id = stashID; confirm("選択した退避データを削除します。") { execute { try $0.dropStash(id); return "削除しました。" } } }
+                    Button(L("適用（退避を残す）")) { let id = stashID; execute { try $0.applyStash(id); return L("適用しました。退避データは残っています。") } }
+                    Button(L("取り出す（Pop）")) { let id = stashID; execute { try $0.applyStash(id, pop: true); return L("退避を取り出しました。") } }
+                    Button(L("削除")) { let id = stashID; confirm(L("選択した退避データを削除します。")) { execute { try $0.dropStash(id); return L("削除しました。") } } }
                 }.disabled(stashID.isEmpty)
             }
-            if !model.changes.isEmpty { Text("退避を戻す前に、現在の変更をコミットまたは退避してください。").font(.caption).foregroundStyle(.secondary) }
-            Button("一覧を更新", action: refresh)
+            if !model.changes.isEmpty { Text(L("退避を戻す前に、現在の変更をコミットまたは退避してください。")).font(.caption).foregroundStyle(.secondary) }
+            Button(L("一覧を更新"), action: refresh)
         }
     }
     private var tagForm: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack { field("タグ名", $tagName); field("対象コミット", $tagRevision) }
-            field("注釈（空欄なら軽量タグ）", $tagMessage)
-            Button("タグを作成") {
+            HStack { field(L("タグ名"), $tagName); field(L("対象コミット"), $tagRevision) }
+            field(L("注釈（空欄なら軽量タグ）"), $tagMessage)
+            Button(L("タグを作成")) {
                 let name = tagName, revision = tagRevision, message = tagMessage
-                execute { try $0.createTag(name, at: revision, message: message); return "タグを作成しました。" }
+                execute { try $0.createTag(name, at: revision, message: message); return L("タグを作成しました。") }
             }.disabled(tagName.isEmpty || tagRevision.isEmpty).buttonStyle(.borderedProminent)
             Divider()
-            if tags.isEmpty { Text("タグはありません。") }
+            if tags.isEmpty { Text(L("タグはありません。")) }
             else {
                 List(tags, id: \.self, selection: Binding(get: { Optional(tag) }, set: { tag = $0 ?? "" })) { name in Label(name, systemImage: "tag").tag(name) }.frame(minHeight: 200, maxHeight: .infinity).accessibilityIdentifier("tagList")
                 HStack {
-                    Button("変更ファイル一覧") {
+                    Button(L("変更ファイル一覧")) {
                         if let repo = model.repository { navigation.openRevision(repo, "refs/tags/" + tag, false) }
                     }.disabled(tag.isEmpty).accessibilityIdentifier("openTagFiles")
-                    Button("ローカルから削除") { let name = tag; confirm("ローカルのタグ「\(name)」を削除します。") { execute { try $0.deleteTag(name); return "削除しました。" } } }
+                    Button(L("ローカルから削除")) { let name = tag; confirm(L("ローカルのタグ「\(name)」を削除します。")) { execute { try $0.deleteTag(name); return L("削除しました。") } } }
                 }
                 if !model.remotes.isEmpty {
-                    Picker("送信先", selection: $model.chosenRemote) { ForEach(model.remotes, id: \.self) { Text($0).tag($0) } }
-                    Button("このタグを Push") {
+                    Picker(L("送信先"), selection: $model.chosenRemote) { ForEach(model.remotes, id: \.self) { Text($0).tag($0) } }
+                    Button(L("このタグを Push")) {
                         let name = tag, remote = model.chosenRemote
-                        confirm("タグ「\(name)」を \(remote) に送信します。") { execute { try $0.pushTag(name, to: remote); return "タグを送信しました。" } }
+                        confirm(L("タグ「\(name)」を \(remote) に送信します。")) { execute { try $0.pushTag(name, to: remote); return L("タグを送信しました。") } }
                     }
                 }
             }
-            Button("一覧を更新", action: refresh)
+            Button(L("一覧を更新"), action: refresh)
         }
     }
     private var remoteForm: some View {
         VStack(alignment: .leading, spacing: 12) {
-            field("リモート名", $remoteName); field("URL / ローカルのリポジトリパス", $remoteURL)
+            field(L("リモート名"), $remoteName); field(L("URL / ローカルのリポジトリパス"), $remoteURL)
             HStack {
-                Button("登録 / URL を変更") {
+                Button(L("登録 / URL を変更")) {
                     let name = remoteName, url = remoteURL
-                    execute { try $0.setRemote(name, url: url); return "リモート設定を保存しました。" }
+                    execute { try $0.setRemote(name, url: url); return L("リモート設定を保存しました。") }
                 }.disabled(remoteName.isEmpty || remoteURL.isEmpty).buttonStyle(.borderedProminent)
-                Button("登録を削除") {
+                Button(L("登録を削除")) {
                     let name = remoteName
-                    confirm("リモート「\(name)」の登録と追跡参照を削除します。サーバー上のリポジトリは残ります。") { execute { try $0.removeRemote(name); return "リモート登録を削除しました。" } }
+                    confirm(L("リモート「\(name)」の登録と追跡参照を削除します。サーバー上のリポジトリは残ります。")) { execute { try $0.removeRemote(name); return L("リモート登録を削除しました。") } }
                 }.disabled(!model.remotes.contains(remoteName))
-                Button("一覧を更新", action: refresh)
+                Button(L("一覧を更新"), action: refresh)
             }
 
         }
@@ -288,9 +289,9 @@ struct RepositoryToolsView: View {
     private var toolsForm: some View {
         VStack(alignment: .leading, spacing: 12) {
             if tool == .rebase {
-                Text("現在のブランチ \(model.branch) のコミットを、選択したブランチの先端につなぎ直します。コミット ID が変わります。")
-                Picker("新しい起点のブランチ", selection: $first) {
-                    Text("ブランチを選択").tag("")
+                Text(L("現在のブランチ \(model.branch) のコミットを、選択したブランチの先端につなぎ直します。コミット ID が変わります。"))
+                Picker(L("新しい起点のブランチ"), selection: $first) {
+                    Text(L("ブランチを選択")).tag("")
                     ForEach(model.branches.filter { $0 != model.branch }, id: \.self) { Text($0).tag($0) }
                 }.onAppear { if first == "HEAD" { first = model.branches.first { $0 != model.branch } ?? "" } }
             } else if let title = tool.fields.first { field(title, $first) }
@@ -306,10 +307,10 @@ struct RepositoryToolsView: View {
                     previewFirst = a; previewSecond = b; previewTool = selectedTool
                     execute { repo in
                         let result = try selectedTool.execute(repo, a, b)
-                        return [.addWorktree, .addSubmodule, .updateSubmodules].contains(selectedTool) ? "完了しました。" : result
+                        return [.addWorktree, .addSubmodule, .updateSubmodules].contains(selectedTool) ? L("完了しました。") : result
                     }
                 }
-                if let message = selectedTool.confirmation { confirm(message + "\n対象: " + a, run: run) } else { run() }
+                if let message = selectedTool.confirmation { confirm(message + L("\n対象: ") + a, run: run) } else { run() }
             }.buttonStyle(.borderedProminent).disabled(!tool.fields.isEmpty && first.isEmpty || tool.fields.count > 1 && second.isEmpty)
         }
     }

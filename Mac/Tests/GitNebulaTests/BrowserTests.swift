@@ -3,16 +3,18 @@ import SwiftUI
 import AppKit
 @testable import GitNebula
 
-final class BrowserTests: XCTestCase {
+final class BrowserTests: LocalizedTestCase {
     var root: URL!
     var repo: GitRepository!
     override func setUpWithError() throws {
+        try super.setUpWithError()
         root = FileManager.default.temporaryDirectory.appendingPathComponent("GUI 星 & " + UUID().uuidString).resolvingSymlinksInPath()
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         repo = try GitRepository.initialize(root.path)
         try repo.setIdentity(name: "GUI Tester", email: "gui@example.invalid")
     }
-    override func tearDownWithError() throws { try FileManager.default.removeItem(at: root) }
+    override func tearDownWithError() throws {
+        try super.tearDownWithError(); try FileManager.default.removeItem(at: root) }
     func write(_ file: String, _ text: String) throws { try text.write(to: root.appendingPathComponent(file), atomically: true, encoding: .utf8) }
     func change(_ file: String) throws -> Change { try XCTUnwrap(repo.changes().first { $0.path == file }) }
     func assertReconstructs(_ document: DiffDocument, old: String, new: String, file: StaticString = #filePath, line: UInt = #line) {

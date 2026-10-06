@@ -4,7 +4,7 @@ import ServiceManagement
 @testable import GitNebula
 
 @MainActor
-final class StartupTests: XCTestCase {
+final class StartupTests: LocalizedTestCase {
     final class LoginService: LoginItemService {
         var status: SMAppService.Status = .notRegistered
         var registrations = 0, removals = 0, settingsOpened = 0

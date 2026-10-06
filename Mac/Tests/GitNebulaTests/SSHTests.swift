@@ -2,7 +2,7 @@ import XCTest
 @testable import GitNebula
 
 @MainActor
-final class SSHTests: XCTestCase {
+final class SSHTests: LocalizedTestCase {
     final class Secrets: SSHSecretStore {
         var values: [String: String] = [:]
         var failSave = false
@@ -22,13 +22,13 @@ final class SSHTests: XCTestCase {
         addTeardownBlock { try? FileManager.default.removeItem(at: root); defaults.removePersistentDomain(forName: suite) }
         return (root, defaults, Secrets())
     }
-    func testSaveUsesSecretStoreAndEmptyFieldPreservesSavedPassphrase() throws {
+    func testSaveRetainsMaskedValueAndStoresOnlyInSecretStore() throws {
         let (root, defaults, store) = try fixture(), key = root.appendingPathComponent("id_ed25519")
         try "test private key".write(to: key, atomically: true, encoding: .utf8)
         let settings = SSHSettings(defaults: defaults, store: store)
         settings.keyPath = "\"" + key.path + "\""; settings.passphrase = "test-only passphrase"
         settings.save()
-        XCTAssertFalse(settings.failed); XCTAssertEqual(settings.keyPath, key.path); XCTAssertTrue(settings.passphrase.isEmpty)
+        XCTAssertFalse(settings.failed); XCTAssertEqual(settings.keyPath, key.path); XCTAssertEqual(settings.passphrase, "test-only passphrase"); XCTAssertTrue(settings.hasSavedPassphrase)
         XCTAssertEqual(store.values[key.path], "test-only passphrase")
         XCTAssertEqual(defaults.string(forKey: "sshKeyPath"), key.path)
         XCTAssertFalse(String(describing: defaults.dictionaryRepresentation()).contains("test-only passphrase"))

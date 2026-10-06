@@ -3,6 +3,7 @@ import AppKit
 
 @MainActor
 struct HistoryBrowserView: View {
+    @ObservedObject private var appearance = AppearanceSettings.shared
     let repo: GitRepository
     let branches: [String]
     let refreshID: UUID
@@ -23,11 +24,11 @@ struct HistoryBrowserView: View {
         VStack(spacing: 10) {
             HStack {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField("コミット ID・メッセージ・作成者を検索", text: $query).textFieldStyle(.roundedBorder)
+                TextField(L("コミット ID・メッセージ・作成者を検索"), text: $query).textFieldStyle(.roundedBorder)
                     .accessibilityIdentifier("historySearch")
-                Picker("履歴", selection: $reference) {
-                    Text("すべてのブランチ").tag("")
-                    Text("現在の HEAD").tag("HEAD")
+                Picker(L("履歴"), selection: $reference) {
+                    Text(L("すべてのブランチ")).tag("")
+                    Text(L("現在の HEAD")).tag("HEAD")
                     ForEach(branches, id: \.self) { Text($0).tag("refs/heads/" + $0) }
                 }.frame(width: 250)
             }
@@ -35,7 +36,7 @@ struct HistoryBrowserView: View {
             VSplitView {
                 VStack(spacing: 0) {
                     Table(filtered, selection: Binding(get: { current?.id }, set: { selection = $0 })) {
-                        TableColumn("コミット") { commit in
+                        TableColumn(L("コミット")) { commit in
                             HStack(spacing: 8) {
                                 Image(systemName: commit.parents.count > 1 ? "arrow.triangle.merge" : "circle.fill")
                                     .font(.system(size: commit.parents.count > 1 ? 12 : 6)).foregroundStyle(.purple)
@@ -45,25 +46,25 @@ struct HistoryBrowserView: View {
                                 }
                             }.padding(.vertical, 3).help(commit.message)
                         }.width(min: 250, ideal: 460)
-                        TableColumn("作成者", value: \.author).width(min: 100, ideal: 145, max: 210)
-                        TableColumn("日時", value: \.displayDate).width(145)
+                        TableColumn(L("作成者"), value: \.author).width(min: 100, ideal: 145, max: 210)
+                        TableColumn(L("日時"), value: \.displayDate).width(145)
                         TableColumn("ID") { Text($0.shortID).font(.system(.caption, design: .monospaced)) }.width(80)
                     }.accessibilityIdentifier("commitTable")
                     .overlay {
-                        if loading && commits.isEmpty { ProgressView("履歴を読み込み中…") }
-                        else if filtered.isEmpty { Text(commits.isEmpty ? "まだコミットはありません" : "一致するコミットはありません").foregroundStyle(.secondary) }
+                        if loading && commits.isEmpty { ProgressView(L("履歴を読み込み中…")) }
+                        else if filtered.isEmpty { Text(commits.isEmpty ? L("まだコミットはありません") : L("一致するコミットはありません")).foregroundStyle(.secondary) }
                     }
                     HStack {
-                        Text("\(filtered.count) 件表示 / \(commits.count) 件読み込み済み").font(.caption).foregroundStyle(.secondary)
-                        if !query.isEmpty { Text("読み込み済みの履歴から検索").font(.caption2).foregroundStyle(.secondary) }
+                        Text(L("\(filtered.count) 件表示 / \(commits.count) 件読み込み済み")).font(.caption).foregroundStyle(.secondary)
+                        if !query.isEmpty { Text(L("読み込み済みの履歴から検索")).font(.caption2).foregroundStyle(.secondary) }
                         Spacer()
                         if loading { ProgressView().controlSize(.small) }
-                        Button("さらに 200 件読み込む") { limit += 200 }.disabled(loading || commits.count < limit)
+                        Button(L("さらに 200 件読み込む")) { limit += 200 }.disabled(loading || commits.count < limit)
                     }.padding(8)
                 }.frame(minHeight: 160, idealHeight: 240, maxHeight: 380)
                 if let commit = current {
                     CommitInspector(repo: repo, commit: commit, model: model).id(commit.id).frame(minHeight: 330, maxHeight: .infinity)
-                } else { BrowserPlaceholder(title: "コミットを選択", detail: "コミットの説明と変更ファイル一覧を表示します。", symbol: "clock.arrow.circlepath").frame(minHeight: 250) }
+                } else { BrowserPlaceholder(title: L("コミットを選択"), detail: L("コミットの説明と変更ファイル一覧を表示します。"), symbol: "clock.arrow.circlepath").frame(minHeight: 250) }
             }
         }
         .task(id: [repo.path, reference, String(limit), refreshID.uuidString, file ?? ""]) {
@@ -83,6 +84,7 @@ struct HistoryBrowserView: View {
 
 @MainActor
 struct CommitInspector: View {
+    @ObservedObject private var appearance = AppearanceSettings.shared
     let repo: GitRepository
     let commit: CommitRecord
     var model: Workspace? = nil
@@ -98,38 +100,38 @@ struct CommitInspector: View {
                 Spacer()
                 Button { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(commit.id, forType: .string) } label: {
                     Label(commit.shortID, systemImage: "doc.on.doc").font(.system(.caption, design: .monospaced))
-                }.help("コミット ID をコピー")
+                }.help(L("コミット ID をコピー"))
             }.padding(.horizontal, 10).padding(.top, 8)
             if commit.message != commit.subject {
                 ScrollView { Text(commit.message).font(.callout).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }.frame(maxHeight: 60).padding(.horizontal, 10)
             }
             HStack {
                 if commit.parents.count > 1 {
-                    Picker("比較する親", selection: Binding(get: { base ?? "" }, set: { parent = $0 })) {
-                        ForEach(Array(commit.parents.enumerated()), id: \.element) { index, hash in Text("親 \(index + 1) · \(hash.prefix(8))").tag(hash) }
+                    Picker(L("比較する親"), selection: Binding(get: { base ?? "" }, set: { parent = $0 })) {
+                        ForEach(Array(commit.parents.enumerated()), id: \.element) { index, hash in Text(L("親 \(index + 1) · \(hash.prefix(8))")).tag(hash) }
                     }.frame(maxWidth: 330)
-                } else { Text(base.map { "親コミット \($0.prefix(8))  →  \(commit.shortID)" } ?? "最初のコミット · 作成前と比較").font(.caption).foregroundStyle(.secondary) }
+                } else { Text(base.map { L("親コミット \($0.prefix(8))  →  \(commit.shortID)") } ?? L("最初のコミット · 作成前と比較")).font(.caption).foregroundStyle(.secondary) }
                 Spacer()
                 if !commit.decorations.isEmpty { Label(commit.decorations, systemImage: "tag").font(.caption).foregroundStyle(.cyan).lineLimit(1) }
             }.padding(.horizontal, 10)
             if let model {
                 HStack {
-                    Button("この変更を取り込む（Cherry-pick）") { run(.cherryPick, model: model) }
-                    Button("このコミットを取り消す（Revert）") { run(.revert, model: model) }
-                    Text("現在: " + model.branch).font(.caption).foregroundStyle(.secondary)
+                    Button(L("この変更を取り込む（Cherry-pick）")) { run(.cherryPick, model: model) }
+                    Button(L("このコミットを取り消す（Revert）")) { run(.revert, model: model) }
+                    Text(L("現在: ") + model.branch).font(.caption).foregroundStyle(.secondary)
                 }.padding(.horizontal, 10).disabled(model.busy || model.sequence != nil || !model.changes.isEmpty || commit.parents.count > 1)
-                if commit.parents.count > 1 { Text("マージコミットの履歴操作には親の指定が必要なため、この画面からは実行できません。").font(.caption).foregroundStyle(.secondary) }
+                if commit.parents.count > 1 { Text(L("マージコミットの履歴操作には親の指定が必要なため、この画面からは実行できません。")).font(.caption).foregroundStyle(.secondary) }
             }
             RevisionFilesView(repo: repo, base: base, target: commit.id)
         }.accessibilityIdentifier("commitInspector")
     }
     private func run(_ tool: RepositoryTool, model: Workspace) {
         let alert = NSAlert(); alert.messageText = tool.title
-        alert.informativeText = "\(tool.confirmation ?? "")\n対象: \(commit.shortID) · \(commit.subject)\n実行先: \(model.branch)\nリポジトリ: \(repo.path)"
-        alert.addButton(withTitle: "実行"); alert.addButton(withTitle: "キャンセル")
+        alert.informativeText = L("\(tool.confirmation ?? "")\n対象: \(commit.shortID) · \(commit.subject)\n実行先: \(model.branch)\nリポジトリ: \(repo.path)")
+        alert.addButton(withTitle: L("実行")); alert.addButton(withTitle: L("キャンセル"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let id = commit.id
-        model.operation(success: tool == .revert ? "Revert が完了しました。履歴を残したまま変更を取り消しました。" : "Cherry-pick が完了しました。") {
+        model.operation(success: tool == .revert ? L("Revert が完了しました。履歴を残したまま変更を取り消しました。") : L("Cherry-pick が完了しました。")) {
             if tool == .revert { try $0.revert(id) } else { try $0.cherryPick(id) }
         }
     }
@@ -138,6 +140,7 @@ struct CommitInspector: View {
 
 @MainActor
 struct RevisionFilesView: View {
+    @ObservedObject private var appearance = AppearanceSettings.shared
     let repo: GitRepository
     let base: String?
     let target: String
@@ -151,8 +154,8 @@ struct RevisionFilesView: View {
         ChangedFilesView(repo: repo, files: files, base: resolvedBase, target: resolvedTarget, checked: .constant([]))
             .disabled(loading || error != nil)
             .overlay {
-                if loading { ProgressView("変更ファイルを読み込み中…") }
-                else if let error { BrowserPlaceholder(title: "比較を読み込めませんでした", detail: error, symbol: "exclamationmark.triangle").background(Color(nsColor: .windowBackgroundColor)) }
+                if loading { ProgressView(L("変更ファイルを読み込み中…")) }
+                else if let error { BrowserPlaceholder(title: L("比較を読み込めませんでした"), detail: error, symbol: "exclamationmark.triangle").background(Color(nsColor: .windowBackgroundColor)) }
             }
         .task(id: [repo.path, base ?? "", target, refreshKey]) {
             loading = true; error = nil

@@ -24,6 +24,8 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     private var pendingRequests: [LaunchRequest] = []
     private var terminating = false
     private var launched = false
+    private var appearanceObserver: NSObjectProtocol?
+    private var languageObserver: NSObjectProtocol?
     let startupOptions: StartupOptions
     init(startupOptions: StartupOptions? = nil) { self.startupOptions = startupOptions ?? .shared; super.init() }
     var residentPreference: () -> Bool = { UserDefaults.standard.bool(forKey: "keepRunning") }
@@ -32,21 +34,14 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         Self.shared = self
         UserDefaults.standard.register(defaults: ["keepRunning": true, "showWelcomeOnLaunch": false])
         NSApp.setActivationPolicy(.accessory)
-        let menu = NSMenu()
-        let appItem = NSMenuItem(); appItem.title = "GitNebula"; menu.addItem(appItem)
-        let appMenu = NSMenu(title: "GitNebula"); appItem.submenu = appMenu
-        appMenu.addItem(withTitle: "GitNebula を開く", action: #selector(showHome(_:)), keyEquivalent: "0").target = self
-        appMenu.addItem(withTitle: "詳細設定…", action: #selector(showSettings(_:)), keyEquivalent: ",").target = self
-        appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "GitNebula を終了", action: #selector(quit(_:)), keyEquivalent: "q").target = self
-        let operations = NSMenuItem(title: "Git 操作", action: nil, keyEquivalent: "")
-        operations.submenu = makeFunctionMenu(); menu.addItem(operations)
-        let editItem = NSMenuItem(); editItem.title = "編集"; menu.addItem(editItem)
-        let edit = NSMenu(title: "編集"); editItem.submenu = edit
-        for (title, selector, key) in [("元に戻す", "undo:", "z"), ("切り取り", "cut:", "x"), ("コピー", "copy:", "c"), ("貼り付け", "paste:", "v"), ("すべて選択", "selectAll:", "a")] {
-            edit.addItem(withTitle: title, action: NSSelectorFromString(selector), keyEquivalent: key)
+        configureMainMenu()
+        appearanceObserver = NotificationCenter.default.addObserver(forName: AppearanceSettings.changed, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.configureMainMenu(); self?.publishLanguage() }
         }
-        NSApp.mainMenu = menu
+        languageObserver = DistributedNotificationCenter.default().addObserver(forName: Localization.request, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.publishLanguage() }
+        }
+        publishLanguage()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem?.button {
             button.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: "GitNebula")
@@ -60,6 +55,26 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         launched = true
         DispatchQueue.main.async { [weak self] in self?.drainRequests() }
     }
+    private func publishLanguage() {
+        DistributedNotificationCenter.default().postNotificationName(Localization.changed, object: Localization.language, userInfo: nil, deliverImmediately: true)
+    }
+    private func configureMainMenu() {
+        let menu = NSMenu()
+        let appItem = NSMenuItem(); appItem.title = "GitNebula"; menu.addItem(appItem)
+        let appMenu = NSMenu(title: "GitNebula"); appItem.submenu = appMenu
+        appMenu.addItem(withTitle: L("GitNebula を開く"), action: #selector(showHome(_:)), keyEquivalent: "0").target = self
+        appMenu.addItem(withTitle: L("詳細設定…"), action: #selector(showSettings(_:)), keyEquivalent: ",").target = self
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: L("GitNebula を終了"), action: #selector(quit(_:)), keyEquivalent: "q").target = self
+        let operations = NSMenuItem(title: L("Git 操作"), action: nil, keyEquivalent: "")
+        operations.submenu = makeFunctionMenu(); menu.addItem(operations)
+        let editItem = NSMenuItem(); editItem.title = L("編集"); menu.addItem(editItem)
+        let edit = NSMenu(title: L("編集")); editItem.submenu = edit
+        for (title, selector, key) in [(L("元に戻す"), "undo:", "z"), (L("切り取り"), "cut:", "x"), (L("コピー"), "copy:", "c"), (L("貼り付け"), "paste:", "v"), (L("すべて選択"), "selectAll:", "a")] {
+            edit.addItem(withTitle: title, action: NSSelectorFromString(selector), keyEquivalent: key)
+        }
+        NSApp.mainMenu = menu
+    }
     func beginLaunch(_ request: LaunchRequest) {
         launched = true
         model.launch(LaunchRequest(action: .open, paths: request.action == .open ? request.paths : []))
@@ -70,7 +85,7 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     func ensureWindow() {
         guard window == nil else { return }
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1220, height: 820), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.title = "GitNebula"; window.appearance = NSAppearance(named: .darkAqua)
+        window.title = "GitNebula"; window.isOpaque = false; window.backgroundColor = .clear
         window.isReleasedWhenClosed = false; window.delegate = self
         window.contentView = NSHostingView(rootView: ContentView(model: model, closeWindow: { [weak window] in window?.performClose(nil) }, navigation: navigation))
         window.center(); self.window = window
@@ -92,7 +107,6 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     }
     @objc private func showSettings(_ sender: Any?) {
         showWindow()
-        if !navigation.busy { navigation.home() }
         guard !navigation.busy else {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.showSettings(nil) }
             return
@@ -100,11 +114,13 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         navigation.openUtility(.settings)
     }
     func makeFunctionMenu() -> NSMenu {
-        let menu = NSMenu(title: "Git 操作")
-        menu.addItem(withTitle: "GitNebula を開く", action: #selector(showHome(_:)), keyEquivalent: "").target = self
+        let menu = NSMenu(title: L("Git 操作"))
+        menu.addItem(withTitle: L("GitNebula を開く"), action: #selector(showHome(_:)), keyEquivalent: "").target = self
         menu.addItem(.separator())
         for (index, group) in GitAction.menuGroups.enumerated() {
             if index > 0 { menu.addItem(.separator()) }
+            let heading = NSMenuItem(title: group.title, action: nil, keyEquivalent: "")
+            heading.isEnabled = false; menu.addItem(heading)
             func addAction(_ action: GitAction) {
                 let item = menu.addItem(withTitle: action.title + "…", action: #selector(openFunction(_:)), keyEquivalent: "")
                 item.target = self; item.representedObject = action.rawValue
@@ -112,10 +128,10 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             }
             for action in group.actions where action != .tags { addAction(action) }
             let pages: [(String, UtilityPage)]
-            switch group.title {
-            case "変更": pages = [("files", .files)]
-            case "ブランチ": pages = [("branches", .branches), ("conflicts", .conflicts)]
-            case "リポジトリ": pages = [("identity", .identity)]
+            switch index {
+            case 0: pages = [("files", .files)]
+            case 2: pages = [("branches", .branches), ("conflicts", .conflicts)]
+            case 4: pages = [("identity", .identity)]
             default: pages = []
             }
             for (name, page) in pages {
@@ -125,27 +141,27 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             if group.actions.contains(.tags) { addAction(.tags) }
         }
         menu.addItem(.separator())
-        menu.addItem(withTitle: "詳細設定…", action: #selector(showSettings(_:)), keyEquivalent: "").target = self
+        menu.addItem(withTitle: L("詳細設定…"), action: #selector(showSettings(_:)), keyEquivalent: "").target = self
         menu.addItem(.separator())
-        menu.addItem(withTitle: "GitNebula を終了", action: #selector(quit(_:)), keyEquivalent: "").target = self
+        menu.addItem(withTitle: L("GitNebula を終了"), action: #selector(quit(_:)), keyEquivalent: "").target = self
         return menu
     }
     func makeResidentMenu() -> NSMenu {
         startupOptions.refresh()
         let menu = NSMenu(title: "GitNebula")
-        menu.addItem(withTitle: "GitNebula を開く", action: #selector(showHome(_:)), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "詳細設定…", action: #selector(showSettings(_:)), keyEquivalent: "").target = self
-        let options = NSMenuItem(title: "起動オプション", action: nil, keyEquivalent: "")
-        let submenu = NSMenu(title: "起動オプション")
-        let login = submenu.addItem(withTitle: "ログイン時に自動起動", action: #selector(toggleLaunchAtLogin(_:)), keyEquivalent: "")
+        menu.addItem(withTitle: L("GitNebula を開く"), action: #selector(showHome(_:)), keyEquivalent: "").target = self
+        menu.addItem(withTitle: L("詳細設定…"), action: #selector(showSettings(_:)), keyEquivalent: "").target = self
+        let options = NSMenuItem(title: L("起動オプション"), action: nil, keyEquivalent: "")
+        let submenu = NSMenu(title: L("起動オプション"))
+        let login = submenu.addItem(withTitle: L("ログイン時に自動起動"), action: #selector(toggleLaunchAtLogin(_:)), keyEquivalent: "")
         login.target = self; login.state = startupOptions.launchAtLogin ? .on : .off
-        let welcome = submenu.addItem(withTitle: "起動時にアプリ画面を開く", action: #selector(toggleWelcomeOnLaunch(_:)), keyEquivalent: "")
+        let welcome = submenu.addItem(withTitle: L("起動時にアプリ画面を開く"), action: #selector(toggleWelcomeOnLaunch(_:)), keyEquivalent: "")
         welcome.target = self; welcome.state = startupOptions.showWelcomeOnLaunch ? .on : .off
         submenu.addItem(.separator())
-        submenu.addItem(withTitle: "ログイン項目の設定を開く…", action: #selector(openLoginSettings(_:)), keyEquivalent: "").target = self
+        submenu.addItem(withTitle: L("ログイン項目の設定を開く…"), action: #selector(openLoginSettings(_:)), keyEquivalent: "").target = self
         options.submenu = submenu; menu.addItem(options)
         menu.addItem(.separator())
-        menu.addItem(withTitle: "GitNebula を終了", action: #selector(quit(_:)), keyEquivalent: "").target = self
+        menu.addItem(withTitle: L("GitNebula を終了"), action: #selector(quit(_:)), keyEquivalent: "").target = self
         return menu
     }
     @objc private func toggleWelcomeOnLaunch(_ sender: NSMenuItem) {
@@ -156,7 +172,7 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         startupOptions.setLaunchAtLogin(!startupOptions.launchAtLogin)
         sender.state = startupOptions.launchAtLogin ? .on : .off
         if let message = startupOptions.message {
-            let alert = NSAlert(); alert.messageText = "ログイン時の自動起動"; alert.informativeText = message
+            let alert = NSAlert(); alert.messageText = L("ログイン時の自動起動"); alert.informativeText = message
             NSApp.activate(ignoringOtherApps: true); alert.runModal()
         }
     }
@@ -185,7 +201,7 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard !navigation.busy else {
             showWindow()
-            let alert = NSAlert(); alert.messageText = "Git の処理が完了してから終了してください。"; alert.runModal()
+            let alert = NSAlert(); alert.messageText = L("Git の処理が完了してから終了してください。"); alert.runModal()
             return .terminateCancel
         }
         terminating = true; return .terminateNow

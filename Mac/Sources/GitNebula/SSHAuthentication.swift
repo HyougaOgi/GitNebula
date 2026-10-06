@@ -16,7 +16,7 @@ struct SSHKeychain: SSHSecretStore {
     }
     private func check(_ status: OSStatus) throws {
         guard status == errSecSuccess else {
-            throw NSError(domain: "GitNebula", code: Int(status), userInfo: [NSLocalizedDescriptionKey: "SSH パスフレーズのキーチェーン操作に失敗しました（\(status)）。"])
+            throw NSError(domain: "GitNebula", code: Int(status), userInfo: [NSLocalizedDescriptionKey: L("SSH パスフレーズのキーチェーン操作に失敗しました（\(status)）。")])
         }
     }
     func read(for key: String) throws -> String? {

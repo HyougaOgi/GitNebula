@@ -3,7 +3,7 @@ import AppKit
 @testable import GitNebula
 
 @MainActor
-final class MenuOperationTests: XCTestCase {
+final class MenuOperationTests: LocalizedTestCase {
     func testEveryMenuItemShowsItsOwnScreenAndReopenShowsWelcome() async throws {
         NSApplication.shared.setActivationPolicy(.regular)
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("menu-routes-" + UUID().uuidString)

@@ -12,10 +12,10 @@ enum SSHAskPass {
                 if let saved = try store.read(for: key) { passphrase = saved }
                 else {
                     NSApplication.shared.setActivationPolicy(.accessory)
-                    let alert = NSAlert(); alert.messageText = "SSH 鍵のパスフレーズ"
-                    alert.informativeText = URL(fileURLWithPath: key).lastPathComponent + " のパスフレーズを入力してください。詳細設定で保存すると、次回から自動で使用します。"
+                    let alert = NSAlert(); alert.messageText = L("SSH 鍵のパスフレーズ")
+                    alert.informativeText = URL(fileURLWithPath: key).lastPathComponent + L(" のパスフレーズを入力してください。詳細設定で保存すると、次回から自動で使用します。")
                     let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 380, height: 24)); alert.accessoryView = field
-                    alert.addButton(withTitle: "接続"); alert.addButton(withTitle: "キャンセル")
+                    alert.addButton(withTitle: L("接続")); alert.addButton(withTitle: L("キャンセル"))
                     NSApp.activate(ignoringOtherApps: true)
                     guard alert.runModal() == .alertFirstButtonReturn else { return 1 }
                     passphrase = field.stringValue
@@ -25,8 +25,8 @@ enum SSHAskPass {
             }
             if environment["SSH_ASKPASS_PROMPT"] == "confirm" || prompt.contains("Are you sure you want to continue connecting") {
                 NSApplication.shared.setActivationPolicy(.accessory)
-                let alert = NSAlert(); alert.messageText = "SSH 接続先の確認"; alert.informativeText = prompt
-                alert.addButton(withTitle: "接続"); alert.addButton(withTitle: "キャンセル")
+                let alert = NSAlert(); alert.messageText = L("SSH 接続先の確認"); alert.informativeText = prompt
+                alert.addButton(withTitle: L("接続")); alert.addButton(withTitle: L("キャンセル"))
                 NSApp.activate(ignoringOtherApps: true)
                 guard alert.runModal() == .alertFirstButtonReturn else { return 1 }
                 FileHandle.standardOutput.write(Data("yes\n".utf8)); return 0

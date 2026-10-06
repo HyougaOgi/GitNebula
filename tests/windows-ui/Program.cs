@@ -16,6 +16,7 @@ internal static class Program
             MainWindow? window = null;
             try
             {
+                AppSettings.Current.Language = "ja";
                 var repo = new GitRepository(root);
                 await repo.Run("init", "-q"); await repo.Run("config", "user.name", "Test"); await repo.Run("config", "user.email", "ui@example.invalid");
                 var file = Path.Combine(root, "orbit.txt"); await File.WriteAllTextAsync(file, "base\n"); await repo.Commit(["orbit.txt"], "initial");
@@ -74,7 +75,7 @@ internal static class Program
                 Find<Button>("OpenPathButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); await Wait();
                 Check(Find<TextBox>("RepositoryPath").Text == root, "typed path opens repository");
                 var panels = new Dictionary<string, string> {
-                    ["open"] = "HomePanel", ["workspace"] = "ManagementPanel", ["files"] = "FilePanel", ["commit"] = "FilePanel", ["diff"] = "FilePanel",
+                    ["graph"] = "GraphPanel", ["open"] = "HomePanel", ["workspace"] = "ManagementPanel", ["files"] = "FilePanel", ["commit"] = "FilePanel", ["diff"] = "FilePanel",
                     ["log"] = "HistoryPanel", ["cherry-pick"] = "HistoryPanel", ["revert"] = "HistoryPanel", ["pull"] = "RemotePanel", ["push"] = "RemotePanel", ["fetch"] = "RemotePanel",
                     ["switch"] = "BranchPanel", ["branches"] = "BranchPanel", ["merge"] = "BranchPanel", ["rebase"] = "BranchPanel",
                     ["clone"] = "ClonePanel", ["stash"] = "StashPanel", ["tags"] = "TagsPanel", ["remotes"] = "RemoteSettingsPanel", ["identity"] = "IdentityPanel", ["settings"] = "SettingsPanel", ["conflicts"] = "ConflictPanel"
@@ -119,6 +120,20 @@ internal static class Program
                 Check(Find<TextBlock>("SequenceNotice").Text.Contains("ありません"), "conflict screen updates after abort");
                 window.ShowHome(); await Wait();
                 Check(Find<ScrollViewer>("HomePanel").IsVisible && !Find<Border>("FilePanel").IsVisible, "re-show opens home");
+                await File.WriteAllTextAsync(file, "new draft change\n");
+                await window.ShowRequest(new LaunchRequest("commit", [root])); await Wait();
+                Find<TextBox>("Message").Text = "draft to preserve";
+                await window.ShowRequest(new LaunchRequest("settings", [])); await Wait();
+                Find<Button>("BackButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); await Wait();
+                Check(Find<StackPanel>("CommitPanel").IsVisible && Find<TextBox>("Message").Text == "draft to preserve", "Back returns from settings to the commit draft");
+                await window.ShowRequest(new LaunchRequest("graph", [])); await Wait();
+                Check(Find<Grid>("GraphPanel").IsVisible && Find<ListBox>("GraphList").Items.Count >= 3 && !Find<Border>("FilePanel").IsVisible, "graph displays commit rows without a diff list");
+                await window.ShowRequest(new LaunchRequest("settings", [])); await Wait();
+                Find<ComboBox>("ThemeChoice").SelectedIndex = 1;
+                Find<Slider>("TransparencyChoice").Value = .4;
+                Find<ComboBox>("LanguageChoice").SelectedIndex = 2;
+                Check(AppSettings.Current.Theme == "light" && AppSettings.Current.Language == "en" && Math.Abs(window.Opacity - .6) < .001, "appearance controls apply and persist");
+                Check(Find<Button>("BackButton").Content as string == "Back", "language changes apply immediately");
                 Console.WriteLine("PASS: WPF action routing, selected-file commit, preview, modes and feedback");
             }
             catch (Exception error) { Console.Error.WriteLine(error); code = 1; }

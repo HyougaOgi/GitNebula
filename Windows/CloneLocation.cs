@@ -17,8 +17,8 @@ public static class CloneLocation
     {
         var folder = RepositoryName(source);
         if (folder.Length == 0 || folder is "." or ".." || folder.IndexOfAny("<>:\"/\\|?*\0".ToCharArray()) >= 0 || folder.EndsWith('.') || folder.Any(char.IsControl))
-            throw new ArgumentException("取得元からリポジトリ名を取得できません。取得元の URL / パスを確認してください。");
-        if (string.IsNullOrWhiteSpace(parent) || !Path.IsPathFullyQualified(parent)) throw new ArgumentException("保存先に絶対パスを指定してください。");
+            throw new ArgumentException(Localization.Text("取得元からリポジトリ名を取得できません。取得元の URL / パスを確認してください。"));
+        if (string.IsNullOrWhiteSpace(parent) || !Path.IsPathFullyQualified(parent)) throw new ArgumentException(Localization.Text("保存先に絶対パスを指定してください。"));
         return Path.Combine(Path.GetFullPath(parent), folder);
     }
 }

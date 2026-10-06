@@ -6,6 +6,7 @@ Directory.CreateDirectory(temporary);
 Environment.SetEnvironmentVariable("GITNEBULA_SETTINGS_PATH", Path.Combine(temporary, "settings.json"));
 try
 {
+    AppSettings.Current.Language = "ja";
     var orderedActions = LaunchRequest.MenuGroups.SelectMany(group => group.Actions).ToArray();
     Check(LaunchRequest.MenuGroups.Select(group => group.Title).SequenceEqual(new[] { "変更", "履歴", "ブランチ", "リモート", "リポジトリ" }), "menu group order");
     Check(orderedActions.Distinct().Count() == orderedActions.Length && orderedActions.ToHashSet().SetEquals(LaunchRequest.Actions.Keys.Except(new[] { "open", "settings" })), "menu includes each Git action exactly once");
@@ -74,6 +75,9 @@ try
     await repo.SaveResolution("new.txt", "resolved\n"); await repo.FinishMerge("resolved merge");
     Check(!await repo.MergeInProgress(), "merge finished");
     Check((await repo.Run("rev-list", "--parents", "-1", "HEAD")).Split(' ', StringSplitOptions.RemoveEmptyEntries).Length == 3, "two parents");
+    var graphRows = GraphLayout.Rows(await repo.History(true));
+    Check(graphRows[0].Commit.Parents.Length == 2 && graphRows[0].Outgoing.Select(edge => edge.To).Distinct().Count() == 2, "graph preserves merge parents");
+    Check(graphRows[0].Incoming.Length == 0 && graphRows[^1].Outgoing.Length == 0 && graphRows.Max(row => row.Width) > 1, "graph tip, root and branch lanes");
     await repo.DeleteBranch("incoming"); Check((await repo.Graph()).Contains("resolved merge"), "history graph");
     var remotePath = Path.Combine(temporary, "remote.git"); Directory.CreateDirectory(remotePath);
     var remote = new GitRepository(remotePath); await remote.Run("init", "--bare", "-q"); await remote.Run("symbolic-ref", "HEAD", "refs/heads/" + main);
@@ -106,7 +110,10 @@ try
     await repo.Run("remote", "add", "origin", remotePath);
     Check(await repo.PreferredRemote() == "team", "prefer configured remote");
     Check(await repo.RemoteBranch("team") == "refs/heads/" + main, "use upstream branch");
-    await repo.Fetch("team"); await repo.Pull("team");
+    await repo.Transfer("fetch", "team"); var pullResult = await repo.Transfer("pull", "team");
+    Check(pullResult.Before != pullResult.After && pullResult.Commits == 1 && pullResult.ChangedFiles.SequenceEqual(new[] { "new.txt" }), "pull reports actual commits and changed files");
+    var alreadyCurrent = await repo.Transfer("pull", "team");
+    Check(alreadyCurrent.Before == alreadyCurrent.After && alreadyCurrent.Commits == 0 && alreadyCurrent.ChangedFiles.Length == 0, "pull reports no-op accurately");
     Check(await File.ReadAllTextAsync(Path.Combine(root, "new.txt")) == "remote update\n", "clone/fetch/push/pull");
     await File.WriteAllTextAsync(Path.Combine(root, "new.txt"), "local reply\n"); await repo.Commit(["new.txt"], "reply"); await repo.Push("team");
     await clone.Pull("origin");
@@ -199,6 +206,12 @@ try
     rejected = false; try { await repo.Run("this-command-does-not-exist"); } catch (InvalidOperationException error) { rejected = error.Message.Contains("終了コード") && error.Message.Contains("not a git command"); }
     Check(rejected, "actionable Git stderr");
     Console.WriteLine("PASS: CRLF parsing, stash save/list/apply/pop/drop, tag/remote, cherry-pick/revert/rebase and conflict recovery");
+    AppSettings.Current.Language = "en";
+    Check(Localization.Text("詳細設定") == "Settings" && Localization.Format($"対象の変更 · {3} ファイル") == "Selected Change · 3 files", "English UI and interpolation");
+    var userMessage = "詳細設定";
+    Check(Localization.Format($"{userMessage} ファイルを選択") == userMessage + " files selected", "user data is not translated");
+    AppSettings.Current.Theme = "light"; AppSettings.Current.Transparency = .4; AppSettings.Current.Save();
+    Check(File.ReadAllText(Path.Combine(temporary, "settings.json")).Contains("light"), "appearance preferences persist");
     Console.WriteLine("PASS: Windows Git backend — preview, selected commit, rename guard, deletion, branches, graph, conflicts, clone/fetch/push/pull");
 }
 finally

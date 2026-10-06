@@ -2,7 +2,8 @@
 import PackageDescription
 let package = Package(
     name: "GitNebula",
+    defaultLocalization: "ja",
     platforms: [.macOS(.v13)],
     products: [.executable(name: "GitNebula", targets: ["GitNebula"])],
-    targets: [.executableTarget(name: "GitNebula"), .testTarget(name: "GitNebulaTests", dependencies: ["GitNebula"])]
+    targets: [.executableTarget(name: "GitNebula", resources: [.process("Resources")]), .testTarget(name: "GitNebulaTests", dependencies: ["GitNebula"])]
 )

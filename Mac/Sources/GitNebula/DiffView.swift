@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 
 struct BrowserPlaceholder: View {
+    @ObservedObject private var appearance = AppearanceSettings.shared
     let title: String
     var detail = ""
     var symbol = "doc.text.magnifyingglass"
@@ -16,6 +17,7 @@ struct BrowserPlaceholder: View {
 
 
 struct SideBySideDiffView: View {
+    @ObservedObject private var appearance = AppearanceSettings.shared
     let document: DiffDocument
     @State private var hunk = 0
     @State private var navigation = 0
@@ -28,11 +30,11 @@ struct SideBySideDiffView: View {
                 Text("+\(document.additions)").foregroundStyle(.green)
                 Text("−\(document.deletions)").foregroundStyle(.red)
                 Divider().frame(height: 16)
-                Button { hunk -= 1; navigation += 1 } label: { Image(systemName: "chevron.up") }.disabled(hunk == 0 || document.hunks.isEmpty).help("前の変更箇所")
-                    .accessibilityLabel("前の変更箇所")
-                Text(document.hunks.isEmpty ? "変更なし" : "\(hunk + 1) / \(document.hunks.count)").font(.caption).monospacedDigit()
-                Button { hunk += 1; navigation += 1 } label: { Image(systemName: "chevron.down") }.disabled(hunk + 1 >= document.hunks.count).help("次の変更箇所")
-                    .accessibilityLabel("次の変更箇所")
+                Button { hunk -= 1; navigation += 1 } label: { Image(systemName: "chevron.up") }.disabled(hunk == 0 || document.hunks.isEmpty).help(L("前の変更箇所"))
+                    .accessibilityLabel(L("前の変更箇所"))
+                Text(document.hunks.isEmpty ? L("変更なし") : "\(hunk + 1) / \(document.hunks.count)").font(.caption).monospacedDigit()
+                Button { hunk += 1; navigation += 1 } label: { Image(systemName: "chevron.down") }.disabled(hunk + 1 >= document.hunks.count).help(L("次の変更箇所"))
+                    .accessibilityLabel(L("次の変更箇所"))
             }.padding(10)
             Divider()
             HStack(spacing: 0) {
@@ -42,13 +44,13 @@ struct SideBySideDiffView: View {
             }.frame(height: 36).background(.white.opacity(0.04))
             Divider()
             if let notice = document.notice, document.rows.isEmpty {
-                BrowserPlaceholder(title: "テキスト比較できないファイル", detail: notice, symbol: "doc")
+                BrowserPlaceholder(title: L("テキスト比較できないファイル"), detail: notice, symbol: "doc")
             } else {
                 SynchronizedDiffPanes(document: document, row: document.hunks.isEmpty ? 0 : document.hunks[hunk], navigation: navigation)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 if let notice = document.notice { Text(notice).font(.caption).foregroundStyle(.orange).padding(6) }
                 if document.hunks.isEmpty {
-                    Text(document.old.exists != document.new.exists ? "空のファイルの追加・削除です。" : "テキストの変更はありません。名前・権限などの変更はファイル一覧を確認してください。")
+                    Text(document.old.exists != document.new.exists ? L("空のファイルの追加・削除です。") : L("テキストの変更はありません。名前・権限などの変更はファイル一覧を確認してください。"))
                         .font(.caption).foregroundStyle(.secondary).padding(6)
                 }
             }
@@ -59,8 +61,8 @@ struct SideBySideDiffView: View {
             Circle().fill(color).frame(width: 6, height: 6)
             Text(title).font(.system(.caption, design: .monospaced))
             Spacer(minLength: 4)
-            if !exists { Text("ファイルなし").font(.caption2).foregroundStyle(.secondary) }
-            else if !endsInNewline { Text("末尾改行なし").font(.caption2).foregroundStyle(.orange) }
+            if !exists { Text(L("ファイルなし")).font(.caption2).foregroundStyle(.secondary) }
+            else if !endsInNewline { Text(L("末尾改行なし")).font(.caption2).foregroundStyle(.orange) }
         }.padding(.horizontal, 10).frame(maxWidth: .infinity)
     }
 }
@@ -136,7 +138,7 @@ final class DiffPanesView: NSView {
             text.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
             text.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
             text.setAccessibilityIdentifier(isBefore ? "diffBefore" : "diffAfter")
-            text.setAccessibilityLabel(isBefore ? "変更前のファイル" : "変更後のファイル")
+            text.setAccessibilityLabel(isBefore ? L("変更前のファイル") : L("変更後のファイル"))
             scroll.documentView = text
             scroll.verticalRulerView = DiffLineRuler(scrollView: scroll, textView: text)
             scroll.hasVerticalRuler = true; scroll.rulersVisible = true

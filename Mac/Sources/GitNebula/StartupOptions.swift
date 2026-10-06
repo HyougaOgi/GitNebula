@@ -42,9 +42,9 @@ final class StartupOptions: ObservableObject {
             if enabled && !launchAtLogin { try loginService.register() }
             else if !enabled && launchAtLogin { try loginService.unregister() }
             refresh()
-            if loginStatus == .requiresApproval { message = "システム設定の「ログイン項目」で GitNebula を許可してください。" }
+            if loginStatus == .requiresApproval { message = L("システム設定の「ログイン項目」で GitNebula を許可してください。") }
         } catch {
-            refresh(); message = "ログイン時の自動起動を変更できませんでした。\n" + error.localizedDescription
+            refresh(); message = L("ログイン時の自動起動を変更できませんでした。\n") + error.localizedDescription
         }
     }
     func openLoginSettings() { loginService.openSettings() }

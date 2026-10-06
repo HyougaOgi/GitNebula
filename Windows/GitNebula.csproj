@@ -8,4 +8,5 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
+  <ItemGroup><EmbeddedResource Include="../Mac/Sources/GitNebula/Resources/en.json" LogicalName="GitNebula.en.json"/></ItemGroup>
 </Project>
