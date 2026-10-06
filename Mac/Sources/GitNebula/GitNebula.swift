@@ -78,7 +78,8 @@ final class Workspace: ObservableObject {
     @Published var succeeded = false
     @Published var failed = false
     @Published var cloneSource = ""
-    @Published var cloneDestination = ""
+    @Published var cloneParent = ""
+    var cloneDestination: String { (try? CloneLocation.destination(parent: cloneParent, source: cloneSource)) ?? "" }
     @Published var repositoryPath = ""
     @Published var sequence: GitSequence?
     @Published var revisionID = UUID()
@@ -126,8 +127,7 @@ final class Workspace: ObservableObject {
         sequence = nil
         message = ""; status = "準備完了"; succeeded = false; failed = false
         if action == .clone {
-            let parent = request.paths.first.map(LaunchRequest.directory) ?? NSHomeDirectory()
-            cloneDestination = URL(fileURLWithPath: parent).appendingPathComponent("new-repository").path
+            cloneParent = request.paths.first.map(LaunchRequest.directory) ?? NSHomeDirectory()
             return
         }
         if action == .initialize { repositoryPath = request.paths.first.map(LaunchRequest.directory) ?? repositoryPath; return }
@@ -172,8 +172,8 @@ final class Workspace: ObservableObject {
     }
     func selectAction(_ value: GitAction) {
         action = value; selected.formIntersection(Set(visibleChanges.map(\.path))); status = "準備完了"; succeeded = false; failed = false
-        if value == .clone, cloneDestination.isEmpty {
-            cloneDestination = URL(fileURLWithPath: repository?.path ?? NSHomeDirectory()).appendingPathComponent("new-repository").path
+        if value == .clone, cloneParent.isEmpty {
+            cloneParent = repository?.path ?? NSHomeDirectory()
         }
     }
     func operation(success: String = "完了しました。", _ work: @escaping @Sendable (GitRepository) throws -> Void) {
@@ -197,8 +197,11 @@ final class Workspace: ObservableObject {
         case .fetch: operation(success: "Fetch が完了しました。") { try $0.fetch(remote) }
         case .switchBranch: operation(success: "ブランチを切り替えました。") { try $0.switchBranch(name) }
         case .clone:
-            let source = cloneSource, destination = cloneDestination
-            perform({ try Snapshot.afterOperation(GitRepository.clone(source, destination)) }, success: "Clone が完了しました。閉じて作業を始められます。") { state in
+            let source = cloneSource, parent = cloneParent
+            perform({
+                let destination = try CloneLocation.destination(parent: parent, source: source)
+                return try Snapshot.afterOperation(GitRepository.clone(source, destination))
+            }, success: "Clone が完了しました。閉じて作業を始められます。") { state in
                 self.request = LaunchRequest(action: .clone, paths: []); self.initialSelection = true; self.apply(state)
             }
         default: break
@@ -375,14 +378,17 @@ struct OperationScreen: View {
     }
     private var cloneForm: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("取得元 URL / パス"); TextField("https://… / ローカルのパス", text: $model.cloneSource).textFieldStyle(.roundedBorder)
-            Text("作成先（新しいフォルダ）"); TextField("/path/to/new-repository", text: $model.cloneDestination).textFieldStyle(.roundedBorder)
-            Button("親フォルダを選択…") {
+            Text("取得元 URL / パス"); TextField("https://… / ローカルのパス", text: $model.cloneSource).textFieldStyle(.roundedBorder).accessibilityIdentifier("cloneSource")
+            Text("保存先（親フォルダ）"); TextField("~/Projects", text: $model.cloneParent).textFieldStyle(.roundedBorder).accessibilityIdentifier("cloneParent")
+            Text("この中にリポジトリ用のフォルダを作ります。既存のファイルやフォルダはそのまま残ります。").font(.caption).foregroundStyle(.secondary)
+            Button("保存先を選択…") {
                 let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
-                if panel.runModal() == .OK, let url = panel.url { model.cloneDestination = url.appendingPathComponent("new-repository").path }
+                if let path = try? LaunchRequest.inputPath(model.cloneParent) { panel.directoryURL = URL(fileURLWithPath: path) }
+                if panel.runModal() == .OK, let url = panel.url { model.cloneParent = url.path }
             }
+            Text("実際の作成先: " + (model.cloneDestination.isEmpty ? "取得元と保存先を指定してください" : model.cloneDestination)).textSelection(.enabled).accessibilityIdentifier("cloneDestination")
             if model.repository != nil { Button("複製したリポジトリをホームで開く", action: navigation.home) }
-            Button("Clone", action: model.runAction).buttonStyle(.borderedProminent).disabled(model.cloneSource.isEmpty || model.cloneDestination.isEmpty)
+            Button("Clone", action: model.runAction).buttonStyle(.borderedProminent).accessibilityIdentifier("cloneExecute").disabled(model.cloneSource.isEmpty || model.cloneDestination.isEmpty || model.busy)
         }
     }
     private var branchForm: some View {

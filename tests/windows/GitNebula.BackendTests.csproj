@@ -1,4 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
-  <ItemGroup><Compile Include="../../Windows/GitRepository.cs" Link="GitRepository.cs"/><Compile Include="../../Windows/LaunchRequest.cs" Link="LaunchRequest.cs"/><Compile Include="../../Windows/GitProcess.cs" Link="GitProcess.cs"/><Compile Include="../../Windows/AppSettings.cs" Link="AppSettings.cs"/><Compile Include="../../Windows/GitTools.cs" Link="GitTools.cs"/></ItemGroup>
+  <ItemGroup><Compile Include="../../Windows/CloneLocation.cs" Link="CloneLocation.cs"/><Compile Include="../../Windows/GitRepository.cs" Link="GitRepository.cs"/><Compile Include="../../Windows/LaunchRequest.cs" Link="LaunchRequest.cs"/><Compile Include="../../Windows/GitProcess.cs" Link="GitProcess.cs"/><Compile Include="../../Windows/AppSettings.cs" Link="AppSettings.cs"/><Compile Include="../../Windows/GitTools.cs" Link="GitTools.cs"/></ItemGroup>
 </Project>

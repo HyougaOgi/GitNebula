@@ -50,8 +50,8 @@ public partial class MainWindow : Window
         Title = Heading.Text + " — GitNebula";
         Width = 1050;
         Height = 820;
-        if (name == "clone" && string.IsNullOrEmpty(CloneDestination.Text))
-            CloneDestination.Text = System.IO.Path.Combine(LaunchRequest.DirectoryFor(request.Paths.FirstOrDefault() ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)), "new-repository");
+        if (name == "clone" && string.IsNullOrEmpty(CloneParent.Text))
+            CloneParent.Text = LaunchRequest.DirectoryFor(request.Paths.FirstOrDefault() ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
         Status.Text = "準備完了";
         if (repository != null) Render(allChanges, currentBranch);
         Controls();
@@ -123,7 +123,11 @@ public partial class MainWindow : Window
         RemoteNotice.Visibility = Show(RemoteChoice.Items.Count == 0);
         SwitchButton.IsEnabled = ready && !string.IsNullOrEmpty(Branch) && Branch != currentBranch && allChanges.Count == 0 && !hasConflicts;
         IntegrateButton.IsEnabled = ready && Branch.Length > 0 && Branch != currentBranch && allChanges.Count == 0 && !hasConflicts;
-        CloneButton.IsEnabled = !busy && !string.IsNullOrWhiteSpace(CloneSource.Text) && !string.IsNullOrWhiteSpace(CloneDestination.Text);
+        string destination;
+        try { destination = CloneLocation.Destination(CloneParent.Text, CloneSource.Text); }
+        catch (ArgumentException) { destination = ""; }
+        CloneDestination.Text = "実際の作成先: " + (destination.Length > 0 ? destination : "取得元と保存先を指定してください");
+        CloneButton.IsEnabled = !busy && !string.IsNullOrWhiteSpace(CloneSource.Text) && destination.Length > 0;
     }
     private void Message_Changed(object sender, TextChangedEventArgs e) => Controls();
     private void StashOption_Changed(object sender, RoutedEventArgs e) => Controls();
@@ -149,8 +153,8 @@ public partial class MainWindow : Window
     }, "完了しました。閉じて作業に戻れます。");
     private void CloneParent_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new OpenFolderDialog { Title = "Clone の親フォルダを選択" };
-        if (dialog.ShowDialog(this) == true) CloneDestination.Text = System.IO.Path.Combine(dialog.FolderName, "new-repository");
+        var dialog = new OpenFolderDialog { Title = "Clone の保存先（親フォルダ）を選択", InitialDirectory = Directory.Exists(CloneParent.Text) ? CloneParent.Text : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) };
+        if (dialog.ShowDialog(this) == true) CloneParent.Text = dialog.FolderName;
     }
     private void Stars_SizeChanged(object sender, SizeChangedEventArgs e)
     {
@@ -257,7 +261,7 @@ public partial class MainWindow : Window
     }
     private async void Clone_Click(object sender, RoutedEventArgs e)
     {
-        await Act(async () => { if (repository != null) drafts[repository.Path] = Message.Text; repository = await GitRepository.Clone(CloneSource.Text, CloneDestination.Text); request = new("clone", []); Message.Clear(); initialSelection = true; selected.Clear(); await RefreshAfterOperation(); }, "Clone が完了しました。閉じて作業を始められます。");
+        await Act(async () => { if (repository != null) drafts[repository.Path] = Message.Text; repository = await GitRepository.Clone(CloneSource.Text, CloneLocation.Destination(CloneParent.Text, CloneSource.Text)); request = new("clone", []); Message.Clear(); initialSelection = true; selected.Clear(); await RefreshAfterOperation(); }, "Clone が完了しました。閉じて作業を始められます。");
     }
     private async void Switch_Click(object sender, RoutedEventArgs e) => await Act(() => Operate(() => Repo.SwitchBranch(Branch)), "ブランチを切り替えました。");
     private async void CreateBranch_Click(object sender, RoutedEventArgs e)

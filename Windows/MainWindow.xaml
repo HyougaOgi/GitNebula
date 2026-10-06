@@ -47,7 +47,16 @@
             <WrapPanel x:Name="AdvancedBranches"><Button Content="作成" Click="CreateBranch_Click"/><Button Content="名前変更" Click="RenameBranch_Click"/><Button Content="削除" Click="DeleteBranch_Click"/><Button Content="現在のブランチにマージ" Click="Merge_Click"/></WrapPanel>
             <Button x:Name="IntegrateButton" Click="Integrate_Click" HorizontalAlignment="Left" Style="{StaticResource PrimaryButton}"/>
           </StackPanel>
-          <StackPanel x:Name="ClonePanel"><TextBlock Text="取得元 URL / パス"/><TextBox x:Name="CloneSource" Margin="0,8,0,16" AutomationProperties.Name="取得元 URL またはパス" TextChanged="Message_Changed"/><TextBlock Text="作成先（新しいフォルダ）"/><TextBox x:Name="CloneDestination" Margin="0,8" AutomationProperties.Name="Clone 作成先" TextChanged="Message_Changed"/><Button Content="親フォルダを選択…" Click="CloneParent_Click" HorizontalAlignment="Left"/><Button x:Name="CloneButton" Content="Clone" Click="Clone_Click" HorizontalAlignment="Left" Style="{StaticResource PrimaryButton}"/></StackPanel>
+          <StackPanel x:Name="ClonePanel">
+            <TextBlock Text="取得元 URL / パス"/>
+            <TextBox x:Name="CloneSource" Margin="0,8,0,16" AutomationProperties.Name="取得元 URL またはパス" TextChanged="Message_Changed"/>
+            <TextBlock Text="保存先（親フォルダ）"/>
+            <TextBox x:Name="CloneParent" Margin="0,8" AutomationProperties.Name="Clone 保存先の親フォルダ" TextChanged="Message_Changed"/>
+            <TextBlock Text="この中にリポジトリ用のフォルダを作ります。既存のファイルやフォルダはそのまま残ります。" TextWrapping="Wrap"/>
+            <Button Content="保存先を選択…" Click="CloneParent_Click" HorizontalAlignment="Left"/>
+            <TextBlock x:Name="CloneDestination" TextWrapping="Wrap" Margin="0,8"/>
+            <Button x:Name="CloneButton" Content="Clone" Click="Clone_Click" HorizontalAlignment="Left" Style="{StaticResource PrimaryButton}"/>
+          </StackPanel>
         </StackPanel>
         <Border Grid.Row="1" x:Name="FilePanel" Style="{StaticResource Panel}">
           <DockPanel>

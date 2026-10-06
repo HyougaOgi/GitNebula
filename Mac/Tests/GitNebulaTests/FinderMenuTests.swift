@@ -7,8 +7,8 @@ import FinderSync
 final class FinderMenuTests: XCTestCase {
     @objc private func launch(_ sender: NSMenuItem) {}
 
-    private func items(_ menu: FinderMenu, paths: [String]) throws -> [NSMenuItem] {
-        let root = try XCTUnwrap(menu.makeMenu(paths: paths, target: self, selector: #selector(launch(_:))))
+    private func items(_ menu: FinderMenu, paths: [String], cloneParent: String? = nil, cloneIntoSelection: String? = nil) throws -> [NSMenuItem] {
+        let root = try XCTUnwrap(menu.makeMenu(paths: paths, cloneParent: cloneParent, cloneIntoSelection: cloneIntoSelection, target: self, selector: #selector(launch(_:))))
         return try XCTUnwrap(root.items.first?.submenu).items.filter { !$0.isSeparatorItem }
     }
 
@@ -60,6 +60,77 @@ final class FinderMenuTests: XCTestCase {
         XCTAssertNil(FinderMenu().makeMenu(paths: [], target: self, selector: #selector(launch(_:))))
     }
 
+    func testCloneUsesContainingDirectoryAndPreservesExistingParentContents() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("Clone 星 #& " + UUID().uuidString).resolvingSymlinksInPath()
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sourceFolder = root.appendingPathComponent("source")
+        try FileManager.default.createDirectory(at: sourceFolder, withIntermediateDirectories: true)
+        let source = try GitRepository.initialize(sourceFolder.path)
+        try source.setIdentity(name: "Test", email: "test@example.invalid")
+        try "cloned\n".write(to: URL(fileURLWithPath: source.path).appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+        try source.commit(["file.txt"], "clone source")
+        let first = root.appendingPathComponent("first target"), second = root.appendingPathComponent("second target")
+        for folder in [first, second] {
+            try FileManager.default.createDirectory(at: folder.appendingPathComponent("unrelated folder"), withIntermediateDirectories: true)
+            try "keep\n".write(to: folder.appendingPathComponent("keep.txt"), atomically: true, encoding: .utf8)
+        }
+        let menu = FinderMenu(), model = Workspace()
+        for (kind, folder) in [(FIMenuKind.contextualMenuForItems, first), (.contextualMenuForContainer, second)] {
+            let selected = [folder.appendingPathComponent("unrelated folder")]
+            let targeted = kind == .contextualMenuForItems ? selected[0] : folder
+            let paths = FinderMenu.paths(for: kind, selected: selected, targeted: targeted)
+            let parent = FinderMenu.cloneParent(for: kind, selected: selected, targeted: targeted)
+            let item = try XCTUnwrap(try items(menu, paths: paths, cloneParent: parent).first { $0.title == FinderMenu.cloneHereTitle })
+            model.launch(try LaunchRequest.parse(menu.request(for: finderCopy(item)).url()))
+            XCTAssertEqual(model.cloneParent, folder.path)
+            model.cloneParent = root.appendingPathComponent("edited draft").path
+        }
+        model.launch(LaunchRequest(action: .clone, paths: [second.path]))
+        model.cloneSource = source.path
+        let destination = second.appendingPathComponent("source")
+        XCTAssertEqual(model.cloneDestination, destination.path)
+        model.runAction()
+        let deadline = Date().addingTimeInterval(20)
+        while model.busy && Date() < deadline { try await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertFalse(model.busy)
+        XCTAssertFalse(model.failed, model.status)
+        XCTAssertTrue(model.succeeded)
+        XCTAssertEqual(model.repository?.path, try GitRepository.open(destination.path).path)
+        XCTAssertEqual(try String(contentsOf: destination.appendingPathComponent("file.txt")), "cloned\n")
+        XCTAssertEqual(try String(contentsOf: second.appendingPathComponent("keep.txt")), "keep\n")
+        XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: second.appendingPathComponent("unrelated folder").path).isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: second.appendingPathComponent(".git").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: second.appendingPathComponent("new-repository").path))
+        model.runAction()
+        while model.busy && Date() < deadline { try await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertTrue(model.failed)
+        XCTAssertEqual(try String(contentsOf: destination.appendingPathComponent("file.txt")), "cloned\n")
+    }
+
+    func testCloneChoicesDoNotRedirectOtherActionsOrOlderMenus() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let row = root.appendingPathComponent("other folder")
+        try FileManager.default.createDirectory(at: row, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let menu = FinderMenu()
+        let selected = [row]
+        let parent = FinderMenu.cloneParent(for: .contextualMenuForItems, selected: selected, targeted: row)
+        let selection = FinderMenu.selectedCloneFolder(for: .contextualMenuForItems, selected: selected)
+        let first = try items(menu, paths: [row.path], cloneParent: parent, cloneIntoSelection: selection)
+        _ = try items(menu, paths: ["/another selection"])
+        for item in first {
+            let request = try LaunchRequest.parse(menu.request(for: finderCopy(item)).url())
+            XCTAssertEqual(request.paths, item.title == FinderMenu.cloneHereTitle ? [root.path] : [row.path])
+        }
+        XCTAssertTrue(first.contains { $0.title == FinderMenu.cloneInSelectionTitle })
+        XCTAssertEqual(FinderMenu.cloneParent(for: .toolbarItemMenu, selected: selected, targeted: root), root.path)
+        for kind in [FIMenuKind.contextualMenuForContainer, .contextualMenuForSidebar] {
+            XCTAssertEqual(FinderMenu.cloneParent(for: kind, selected: selected, targeted: root), root.path)
+            XCTAssertNil(FinderMenu.selectedCloneFolder(for: kind, selected: selected))
+        }
+    }
+
     func testFinderActionsLoadTheirRepositoryAndContents() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("Finder 星 #& " + UUID().uuidString).resolvingSymlinksInPath()
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -82,7 +153,7 @@ final class FinderMenuTests: XCTestCase {
             XCTAssertEqual(model.action, request.action)
             switch request.action {
             case .clone:
-                XCTAssertEqual(model.cloneDestination, root.appendingPathComponent("new-repository").path)
+                XCTAssertEqual(model.cloneParent, root.path)
             case .initialize:
                 XCTAssertEqual(model.repositoryPath, root.path)
             default:

@@ -56,6 +56,24 @@ try
     rejected = false; try { await repo.Push("origin"); } catch (InvalidOperationException error) { rejected = error.Message.Contains("ブランチを選んでください"); }
     Check(rejected, "detached push explains selecting a branch"); await repo.SwitchBranch(main);
     var clone = await GitRepository.Clone(remotePath, Path.Combine(temporary, "clone"));
+    foreach (var source in new[] { "https://example.invalid/team/星%20repo.git/?token=123#fragment", "git@example.invalid:team/星 repo.git", "ssh://git@example.invalid/team/星%20repo.git", "/tmp/星 repo.git/", @"C:\Projects\星 repo.git" })
+        Check(CloneLocation.RepositoryName(source) == "星 repo", "clone source name: " + source);
+    var parent = Path.Combine(temporary, "occupied parent 星 #&"); Directory.CreateDirectory(parent);
+    await File.WriteAllTextAsync(Path.Combine(parent, "keep.txt"), "keep\n"); Directory.CreateDirectory(Path.Combine(parent, "other folder"));
+    var destination = CloneLocation.Destination(parent, remotePath);
+    var childClone = await GitRepository.Clone(remotePath, destination);
+    Check(File.Exists(Path.Combine(destination, "new.txt")) && !Directory.Exists(Path.Combine(parent, ".git")), "clone creates named child of occupied parent");
+    Check(await File.ReadAllTextAsync(Path.Combine(parent, "keep.txt")) == "keep\n" && !Directory.EnumerateFileSystemEntries(Path.Combine(parent, "other folder")).Any(), "parent contents preserved");
+    foreach (var source in new[] { "", ".", ".." }) {
+        rejected = false; try { CloneLocation.Destination(parent, source); } catch (ArgumentException) { rejected = true; }
+        Check(rejected, "reject clone source without a repository name: " + source);
+    }
+    var emptyCloneTarget = Path.Combine(temporary, "Clone 星 empty"); Directory.CreateDirectory(emptyCloneTarget);
+    var emptyClone = await GitRepository.Clone(remotePath, emptyCloneTarget);
+    Check(await emptyClone.Revision("HEAD") == await repo.Revision("HEAD") && File.Exists(Path.Combine(emptyCloneTarget, "new.txt")), "clone into an existing empty selected directory");
+    await File.WriteAllTextAsync(Path.Combine(emptyCloneTarget, "keep.txt"), "preserve\n");
+    rejected = false; try { await GitRepository.Clone(remotePath, emptyCloneTarget); } catch (InvalidOperationException) { rejected = true; }
+    Check(rejected && await File.ReadAllTextAsync(Path.Combine(emptyCloneTarget, "keep.txt")) == "preserve\n", "clone rejects a nonempty directory and preserves its files");
     await clone.Run("config", "user.name", "Test"); await clone.Run("config", "user.email", "test@example.invalid");
     await File.WriteAllTextAsync(Path.Combine(clone.Path, "new.txt"), "remote update\n"); await clone.Commit(["new.txt"], "remote update"); await clone.Push("origin");
     await repo.RenameBranch(main, "local-work"); await repo.Run("remote", "rename", "origin", "team");

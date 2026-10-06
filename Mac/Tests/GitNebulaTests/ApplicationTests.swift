@@ -46,6 +46,8 @@ final class ApplicationTests: XCTestCase {
         XCTAssertTrue(delegate.window === window, "Closing must retain the resident window")
         XCTAssertFalse(delegate.applicationShouldTerminateAfterLastWindowClosed(NSApplication.shared))
         XCTAssertFalse(delegate.applicationShouldHandleReopen(NSApplication.shared, hasVisibleWindows: false))
+        XCTAssertFalse(window.isVisible, "Reopen must leave the menu-only app in the background")
+        delegate.showHome(nil)
         XCTAssertTrue(window.isVisible)
         XCTAssertEqual(delegate.navigation.current?.model?.action, .open)
         XCTAssertTrue(delegate.window === window, "Reopen must not create another window")

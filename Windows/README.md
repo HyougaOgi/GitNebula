@@ -36,6 +36,8 @@ Extract the archive under `dist/windows/` into a stable installation folder. To 
 
 Right-click a file, folder, or folder background and choose **GitNebula → 変更をコミット / 差分を確認 / 履歴を表示 / Pull / Push / Fetch / ブランチを切り替え / Clone**. The requested operation opens directly; Commit preselects the changes in the clicked file or folder. Explorer supports a single selected file/folder per dialog; use a folder to include all descendants. Each invocation is forwarded to the running app and uses its existing window. Requests wait for a running Git operation to finish. On Windows 11 this entry may appear under **Show more options**. Administrator privileges are not required. Re-run the installer after upgrading to replace the previous single-command entry.
 
+Clone defaults to the right-clicked directory as its parent and creates a repository-named child folder inside it. The form only asks for the source and parent directory; the repository name is automatic, and the complete destination is shown for confirmation. Existing parent contents are preserved. A later Explorer request updates the parent even if a previous Clone dialog had been edited. Occupied child destinations are rejected without overwriting them.
+
 Command-line examples:
 
 ```powershell

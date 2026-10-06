@@ -99,7 +99,13 @@ struct GitRepository: Sendable {
     static func clone(_ source: String, _ destination: String) throws -> GitRepository {
         let target = URL(fileURLWithPath: NSString(string: destination).expandingTildeInPath)
         let runner = GitRepository(path: target.deletingLastPathComponent().path)
-        guard !source.isEmpty, !destination.isEmpty, !FileManager.default.fileExists(atPath: target.path) else { throw runner.failure("取得元と、存在しない作成先フォルダを指定してください") }
+        guard !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !destination.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw runner.failure("取得元と作成先フォルダを指定してください。") }
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: target.path, isDirectory: &isDirectory) {
+            guard isDirectory.boolValue, try FileManager.default.contentsOfDirectory(atPath: target.path).isEmpty else {
+                throw runner.failure("作成先 \(target.path) は既に使われています。別の保存先を指定してください。")
+            }
+        }
         _ = try runner.run(["clone", "--", source, target.path])
         return try open(target.path)
     }

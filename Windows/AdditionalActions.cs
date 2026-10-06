@@ -18,6 +18,7 @@ public partial class MainWindow
         await Act(async () => {
             if (repository != null) drafts[repository.Path] = Message.Text;
             request = value.Paths.Length == 0 && repository != null ? new LaunchRequest(value.Action, request.Paths) : value;
+            if (value.Action == "clone" && value.Paths.Length > 0) CloneParent.Text = LaunchRequest.DirectoryFor(value.Paths[0]);
             var opensRepository = value.Action is not ("clone" or "settings") && value.Paths.Length > 0;
             if (opensRepository) { repository = null; hasHead = false; sequence = null; merging = false; initialSelection = true; selected.Clear(); Message.Clear(); }
             SetAction(value.Action);

@@ -4,6 +4,8 @@ import FinderSync
 // Finder transports menu items across a process boundary. The action sender is
 // a copy: use its integer tag, not representedObject or object identity.
 final class FinderMenu {
+    static let cloneHereTitle = "この階層にリポジトリを複製（Clone）…"
+    static let cloneInSelectionTitle = "選択フォルダ内に Clone…"
     private var nextTag = 1
     private var requests: [[Int: LaunchRequest]] = []
 
@@ -15,22 +17,46 @@ final class FinderMenu {
         return targeted.map { [$0.path] } ?? []
     }
 
-    func makeMenu(paths: [String], target: AnyObject, selector: Selector) -> NSMenu? {
+    static func cloneParent(for kind: FIMenuKind, selected: [URL]?, targeted: URL?) -> String? {
+        if kind == .contextualMenuForContainer || kind == .contextualMenuForSidebar { return targeted?.path }
+        // Item menus select the row under the pointer, even when the user only
+        // wanted the menu for the directory they are browsing (not that row).
+        if let item = selected?.first { return item.deletingLastPathComponent().path }
+        if kind == .contextualMenuForItems { return targeted?.deletingLastPathComponent().path }
+        return targeted?.path
+    }
+
+    static func selectedCloneFolder(for kind: FIMenuKind, selected: [URL]?) -> String? {
+        guard kind == .contextualMenuForItems || kind == .toolbarItemMenu,
+              let selected, selected.count == 1,
+              (try? selected[0].resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { return nil }
+        return selected[0].path
+    }
+
+    func makeMenu(paths: [String], cloneParent: String? = nil, cloneIntoSelection: String? = nil, target: AnyObject, selector: Selector) -> NSMenu? {
         guard !paths.isEmpty else { return nil }
         let menu = NSMenu(title: "GitNebula")
         let root = NSMenuItem(title: "GitNebula", action: nil, keyEquivalent: "")
         root.image = NSImage(systemSymbolName: "arrow.triangle.branch", accessibilityDescription: nil)
         let actions = NSMenu(title: "GitNebula")
         var context: [Int: LaunchRequest] = [:]
-        for action in GitAction.allCases where action != .open {
-            if action == .clone || action == .workspace { actions.addItem(.separator()) }
-            let item = NSMenuItem(title: action.title + "…", action: selector, keyEquivalent: "")
+        func add(_ action: GitAction, title: String, paths: [String]) {
+            let item = NSMenuItem(title: title, action: selector, keyEquivalent: "")
             item.target = target
             item.image = NSImage(systemSymbolName: action.symbol, accessibilityDescription: nil)
             item.tag = nextTag
             context[nextTag] = LaunchRequest(action: action, paths: paths)
             nextTag += 1
             actions.addItem(item)
+        }
+        for action in GitAction.allCases where action != .open {
+            if action == .clone || action == .workspace { actions.addItem(.separator()) }
+            if action == .clone, let cloneParent {
+                add(action, title: Self.cloneHereTitle, paths: [cloneParent])
+                if let cloneIntoSelection, cloneIntoSelection != cloneParent {
+                    add(action, title: Self.cloneInSelectionTitle, paths: [cloneIntoSelection])
+                }
+            } else { add(action, title: action.title + "…", paths: paths) }
         }
         // Keep recent menus separate so a later menu cannot change the paths
         // associated with an earlier click. Bound storage in this long-lived process.

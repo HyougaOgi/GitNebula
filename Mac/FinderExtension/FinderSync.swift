@@ -13,8 +13,12 @@ final class FinderSync: FIFinderSync {
     override var toolbarItemImage: NSImage { NSImage(systemSymbolName: "arrow.triangle.branch", accessibilityDescription: "GitNebula")! }
     override func menu(for menuKind: FIMenuKind) -> NSMenu? {
         let controller = FIFinderSyncController.default()
-        let paths = FinderMenu.paths(for: menuKind, selected: controller.selectedItemURLs(), targeted: controller.targetedURL())
-        return actionMenu.makeMenu(paths: paths, target: self, selector: #selector(launch(_:)))
+        let selected = controller.selectedItemURLs(), targeted = controller.targetedURL()
+        let paths = FinderMenu.paths(for: menuKind, selected: selected, targeted: targeted)
+        return actionMenu.makeMenu(paths: paths,
+                                  cloneParent: FinderMenu.cloneParent(for: menuKind, selected: selected, targeted: targeted),
+                                  cloneIntoSelection: FinderMenu.selectedCloneFolder(for: menuKind, selected: selected),
+                                  target: self, selector: #selector(launch(_:)))
     }
     @objc private func launch(_ sender: NSMenuItem) {
         do {

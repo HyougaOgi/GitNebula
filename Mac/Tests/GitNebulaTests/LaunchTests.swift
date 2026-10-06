@@ -4,6 +4,26 @@ import SwiftUI
 @testable import GitNebula
 
 final class LaunchTests: XCTestCase {
+    @MainActor
+    func testCloneNamesAlwaysFollowSourceAutomatically() throws {
+        for source in ["https://example.invalid/team/星%20repo.git/?token=123#fragment", "git@example.invalid:team/星 repo.git", "ssh://git@example.invalid/team/星%20repo.git", "/tmp/星 repo.git/", "C:\\Projects\\星 repo.git"] {
+            XCTAssertEqual(CloneLocation.repositoryName(for: source), "星 repo", source)
+        }
+        XCTAssertEqual(CloneLocation.repositoryName(for: "https://example.invalid/team/repo%2520name.git"), "repo%20name")
+        let model = Workspace()
+        model.launch(LaunchRequest(action: .clone, paths: ["/tmp/parent folder"]))
+        model.cloneSource = "https://example.invalid/team/one.git"
+        XCTAssertEqual(model.cloneDestination, "/tmp/parent folder/one")
+        model.cloneSource = "git@example.invalid:two.git"
+        XCTAssertEqual(model.cloneDestination, "/tmp/parent folder/two")
+        model.cloneSource = "https://example.invalid/team/three.git"
+        XCTAssertEqual(model.cloneDestination, "/tmp/parent folder/three")
+        model.cloneSource = ""
+        XCTAssertTrue(model.cloneDestination.isEmpty)
+        for source in ["", ".", ".."] {
+            XCTAssertThrowsError(try CloneLocation.destination(parent: "/tmp/parent", source: source))
+        }
+    }
     func testArgumentsAndScope() throws {
         let request = try LaunchRequest.parse(["--action", "commit", "--path", "/repo/日本語 file.txt", "--path", "/repo/src"])
         XCTAssertEqual(request.action, .commit)

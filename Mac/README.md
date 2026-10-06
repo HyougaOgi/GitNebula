@@ -16,9 +16,11 @@ For packaging only, run `bash Mac/package.sh --unsigned`. The package is written
 
 ## Welcome and residence
 
-Normal startup and a click on the app or Dock show **GitNebula へようこそ**, with repository selection, Clone, Init, recent repositories and settings. Click the menu-bar icon or use **Git 操作** in the application menu to open a function. Close hides the window by default; choose **GitNebula を終了** to quit. **アプリの設定** controls residence and the Git executable without requiring a repository. **前の作業画面に戻る** restores the previous route, including its commit draft.
+Normal startup and reopening the app keep it in the menu bar with no Dock icon or window. The icon menu contains **ようこそを開く**, **詳細設定…**, **起動オプション** and **GitNebula を終了**. Startup options include **ログイン時に自動起動** (using macOS login items) and **起動時にようこそ画面を開く** (off by default). Login-item registration errors and required system approval are displayed; opening login-item settings is available from both the menu and detailed settings.
 
-Cherry-pick and Revert each open a dedicated commit selector with an execute button and confirmation. Rebase and Merge each open a dedicated branch selector. These screens contain no working-file diff list. A menu or Dock request during a Git operation waits for completion before changing screens. Unstage accepts mixed selections and removes only staged changes, preserving working and untracked files. Push explains when an initial commit or branch selection is required.
+**ようこそを開く** shows repository selection, Clone, Init, recent repositories and settings. After choosing a repository, **このリポジトリで操作する** opens its Git operations. The resident menu contains no Git operations without a folder context. Finder context-menu actions open their dedicated screen even when the app has no window. Close hides the window by default. **前の作業画面に戻る** restores the previous route, including its commit draft.
+
+Cherry-pick and Revert each open a dedicated commit selector with an execute button and confirmation. Rebase and Merge each open a dedicated branch selector. These screens contain no working-file diff list. A welcome or Finder request during a Git operation waits for completion before changing screens. Unstage accepts mixed selections and removes only staged changes, preserving working and untracked files. Push explains when an initial commit or branch selection is required.
 
 ## Opening a repository
 
@@ -53,10 +55,12 @@ Finder opens the requested operation through `gitnebula://commit?path=…` (and 
 ```sh
 open -a GitNebula --args --action commit --path /path/to/repository
 open -a GitNebula --args --action diff --path "/path/to/repository/file.txt"
-open -a GitNebula --args --action clone --path /path/to/parent
+open -a GitNebula --args --action clone --path /path/to/parent-folder
 ```
 
 After upgrading, quit the previous app, run the installer again, and toggle the Finder extension off and on if Finder still shows the old menu. A GitNebula toolbar button is also available from Finder's toolbar customization.
+
+Clone uses a parent directory and creates a child folder named after the source repository. Existing files in the parent are preserved. The form only asks for the source and parent directory; the repository name is automatic, and the complete destination is shown for confirmation. Finder’s **この階層にリポジトリを複製（Clone）…** uses the directory containing the clicked row, so list-view clicks do not redirect Clone into an unrelated folder. **選択フォルダ内に Clone…** explicitly uses the selected folder. Background and sidebar menus use their targeted folder. The picker opens at the current parent. An occupied child destination is rejected without overwriting it.
 
 Disable the extension in System Settings before removing the application. `swift run` runs the development executable and does not install the Finder extension.
 

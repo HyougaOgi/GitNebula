@@ -31,6 +31,18 @@ internal static class Program
                 await Wait();
                 Check(Find<ScrollViewer>("HomePanel").IsVisible && !Find<Border>("FilePanel").IsVisible, "normal startup displays home without diff");
                 Check(Find<StackPanel>("SettingsPanel").Visibility == Visibility.Collapsed, "startup displays one screen");
+                var firstCloneTarget = Path.Combine(root, "Clone 星 first"); Directory.CreateDirectory(firstCloneTarget);
+                var secondCloneTarget = Path.Combine(root, "Clone 星 second"); Directory.CreateDirectory(secondCloneTarget);
+                await window.ShowRequest(new LaunchRequest("clone", [firstCloneTarget])); await Wait();
+                Check(Find<TextBox>("CloneParent").Text == firstCloneTarget, "clone uses the right-clicked directory as parent");
+                Find<TextBox>("CloneSource").Text = "https://example.invalid/team/repo.git";
+                Check(Find<TextBlock>("CloneDestination").Text.EndsWith(Path.Combine(firstCloneTarget, "repo")), "source automatically supplies repository destination");
+                Find<TextBox>("CloneSource").Text = "git@example.invalid:team/other.git";
+                Check(Find<TextBlock>("CloneDestination").Text.EndsWith(Path.Combine(firstCloneTarget, "other")), "repository destination follows source automatically");
+                Find<TextBox>("CloneParent").Text = Path.Combine(root, "edited clone draft");
+                await window.ShowRequest(new LaunchRequest("clone", [secondCloneTarget])); await Wait();
+                Check(Find<TextBox>("CloneParent").Text == secondCloneTarget, "a later Explorer request replaces the previous clone parent");
+                await window.ShowRequest(new LaunchRequest("open", [])); await Wait();
                 await window.ShowRequest(new LaunchRequest("commit", [file])); await Wait();
                 Check(Find<StackPanel>("CommitPanel").IsVisible, "commit dialog opens directly");
                 Check(!Find<StackPanel>("BranchPanel").IsVisible && !Find<TextBox>("History").IsVisible, "unrelated tools hidden");

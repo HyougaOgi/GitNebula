@@ -37,7 +37,7 @@ enum GitAction: String, CaseIterable, Sendable {
         case .push: return "現在のブランチのコミットをリモートに送信します。"
         case .fetch: return "リモートの最新情報を取得します。作業ファイルは変更しません。"
         case .switchBranch: return "切り替え先を選んで実行します。未コミットの変更がある場合は停止します。"
-        case .clone: return "取得元と、新しく作るフォルダを指定してください。"
+        case .clone: return "保存先の中に、リポジトリ名のフォルダを作って複製します。"
         case .initialize: return "選択したフォルダに新しい Git リポジトリを作成します。"
         case .stash: return "変更を一時保存し、後で作業ツリーに戻します。"
         case .tags: return "リリースなどの目印をコミットに付けます。"

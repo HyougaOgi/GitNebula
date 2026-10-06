@@ -22,12 +22,15 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     private var statusItem: NSStatusItem?
     private var pendingRequests: [LaunchRequest] = []
     private var terminating = false
+    private var launched = false
+    let startupOptions: StartupOptions
+    init(startupOptions: StartupOptions? = nil) { self.startupOptions = startupOptions ?? .shared; super.init() }
     var residentPreference: () -> Bool = { UserDefaults.standard.bool(forKey: "keepRunning") }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Self.shared = self
-        UserDefaults.standard.register(defaults: ["keepRunning": true])
-        NSApp.setActivationPolicy(.regular)
+        UserDefaults.standard.register(defaults: ["keepRunning": true, "showWelcomeOnLaunch": false])
+        NSApp.setActivationPolicy(.accessory)
         let menu = NSMenu()
         let appItem = NSMenuItem(); appItem.title = "GitNebula"; menu.addItem(appItem)
         let appMenu = NSMenu(title: "GitNebula"); appItem.submenu = appMenu
@@ -49,15 +52,19 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             button.target = self; button.action = #selector(statusClick(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
-        ensureWindow()
         do {
             let request = try LaunchRequest.parse(Array(CommandLine.arguments.dropFirst()))
-            model.launch(LaunchRequest(action: .open, paths: request.action == .open ? request.paths : []))
-            if request.action != .open { pendingRequests.append(request) }
-        } catch { model.status = error.localizedDescription; model.failed = true }
-        showWindow()
-        // Install the home route before applying command-line or URL requests.
+            beginLaunch(request)
+        } catch { model.status = error.localizedDescription; model.failed = true; showHome(nil) }
+        launched = true
         DispatchQueue.main.async { [weak self] in self?.drainRequests() }
+    }
+    func beginLaunch(_ request: LaunchRequest) {
+        launched = true
+        model.launch(LaunchRequest(action: .open, paths: request.action == .open ? request.paths : []))
+        if request.action != .open {
+            pendingRequests.append(request); drainRequests()
+        } else if !request.paths.isEmpty || startupOptions.showWelcomeOnLaunch { showHome(nil) }
     }
     func ensureWindow() {
         guard window == nil else { return }
@@ -111,6 +118,37 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         menu.addItem(withTitle: "GitNebula を終了", action: #selector(quit(_:)), keyEquivalent: "").target = self
         return menu
     }
+    func makeResidentMenu() -> NSMenu {
+        startupOptions.refresh()
+        let menu = NSMenu(title: "GitNebula")
+        menu.addItem(withTitle: "ようこそを開く", action: #selector(showHome(_:)), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "詳細設定…", action: #selector(showSettings(_:)), keyEquivalent: "").target = self
+        let options = NSMenuItem(title: "起動オプション", action: nil, keyEquivalent: "")
+        let submenu = NSMenu(title: "起動オプション")
+        let login = submenu.addItem(withTitle: "ログイン時に自動起動", action: #selector(toggleLaunchAtLogin(_:)), keyEquivalent: "")
+        login.target = self; login.state = startupOptions.launchAtLogin ? .on : .off
+        let welcome = submenu.addItem(withTitle: "起動時にようこそ画面を開く", action: #selector(toggleWelcomeOnLaunch(_:)), keyEquivalent: "")
+        welcome.target = self; welcome.state = startupOptions.showWelcomeOnLaunch ? .on : .off
+        submenu.addItem(.separator())
+        submenu.addItem(withTitle: "ログイン項目の設定を開く…", action: #selector(openLoginSettings(_:)), keyEquivalent: "").target = self
+        options.submenu = submenu; menu.addItem(options)
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "GitNebula を終了", action: #selector(quit(_:)), keyEquivalent: "").target = self
+        return menu
+    }
+    @objc private func toggleWelcomeOnLaunch(_ sender: NSMenuItem) {
+        startupOptions.showWelcomeOnLaunch.toggle()
+        sender.state = startupOptions.showWelcomeOnLaunch ? .on : .off
+    }
+    @objc private func toggleLaunchAtLogin(_ sender: NSMenuItem) {
+        startupOptions.setLaunchAtLogin(!startupOptions.launchAtLogin)
+        sender.state = startupOptions.launchAtLogin ? .on : .off
+        if let message = startupOptions.message {
+            let alert = NSAlert(); alert.messageText = "ログイン時の自動起動"; alert.informativeText = message
+            NSApp.activate(ignoringOtherApps: true); alert.runModal()
+        }
+    }
+    @objc private func openLoginSettings(_ sender: Any?) { startupOptions.openLoginSettings() }
     @objc private func openFunction(_ sender: NSMenuItem) {
         guard let name = sender.representedObject as? String, let action = GitAction(rawValue: name) else { return }
         pendingRequests.append(navigation.request(for: action))
@@ -129,7 +167,7 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         navigation.openUtility(page)
     }
     @objc private func statusClick(_ sender: Any?) {
-        if let button = statusItem?.button { makeFunctionMenu().popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height), in: button) }
+        if let button = statusItem?.button { makeResidentMenu().popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height), in: button) }
     }
     @objc func quit(_ sender: Any?) { NSApp.terminate(sender) }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -146,16 +184,20 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         quit(nil); return false
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
-    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { showHome(nil); return false }
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if startupOptions.showWelcomeOnLaunch { showHome(nil) }
+        return false
+    }
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls {
             do { pendingRequests.append(try LaunchRequest.parse(url)) }
             catch { model.status = error.localizedDescription; model.failed = true }
         }
-        if window != nil { drainRequests() }
+        if launched || window != nil { drainRequests() }
     }
     private func drainRequests() {
         guard !pendingRequests.isEmpty else { return }
+        ensureWindow()
         navigation.installRoot(model, close: { [weak self] in self?.window?.performClose(nil) })
         guard !navigation.busy else {
             // Queue a new Finder request rather than discarding a running operation.

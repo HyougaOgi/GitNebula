@@ -77,7 +77,8 @@ public sealed partial class GitRepository(string path)
     {
         if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(destination)) throw new InvalidOperationException("取得元と作成先を指定してください。");
         var target = System.IO.Path.GetFullPath(destination);
-        if (File.Exists(target) || Directory.Exists(target)) throw new InvalidOperationException("存在しない作成先フォルダを指定してください。");
+        if (File.Exists(target) || Directory.Exists(target) && Directory.EnumerateFileSystemEntries(target).Any())
+            throw new InvalidOperationException($"作成先 {target} は既に使われています。別の保存先を指定してください。");
         var runner = new GitRepository(System.IO.Path.GetDirectoryName(target)!);
         await runner.Run("clone", "--", source, target);
         var repo = new GitRepository(target); await repo.Open(); return repo;

@@ -71,4 +71,17 @@ final class GitTests: XCTestCase {
         XCTAssertEqual(try clone.readFile("orbit.txt"), "local reply\n")
         XCTAssertEqual(try repo.readFile("orbit.txt"), "local reply\n")
     }
+
+    func testCloneRejectsOccupiedDestinationsWithoutChangingTheirContents() throws {
+        try write("file.txt", "source\n"); try repo.commit(["file.txt"], "source")
+        let occupied = root.appendingPathComponent("occupied")
+        try FileManager.default.createDirectory(at: occupied, withIntermediateDirectories: true)
+        let marker = occupied.appendingPathComponent(".keep")
+        try "preserve\n".write(to: marker, atomically: true, encoding: .utf8)
+        XCTAssertThrowsError(try GitRepository.clone(repo.path, occupied.path))
+        XCTAssertEqual(try String(contentsOf: marker), "preserve\n")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: occupied.path), [".keep"])
+        XCTAssertThrowsError(try GitRepository.clone(repo.path, marker.path))
+        XCTAssertEqual(try String(contentsOf: marker), "preserve\n")
+    }
 }
