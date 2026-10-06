@@ -610,5 +610,6 @@
   "Git を起動できません（{0}）。設定で Git の実行ファイルを確認してください。\n{1}": "Could not launch Git ({0}). Check the Git executable in Settings.\n{1}",
   "git {0} が失敗しました（終了コード {1}）。\n{2}{3}{4}": "git {0} failed (exit code {1}).\n{2}{3}{4}",
   "フォルダの絶対パスを入力してください。": "Enter an absolute folder path.",
-  "git {0} が失敗しました（終了コード {1}）。\n{2}{3}": "git {0} failed (exit code {1}).\n{2}{3}"
+  "git {0} が失敗しました（終了コード {1}）。\n{2}{3}": "git {0} failed (exit code {1}).\n{2}{3}",
+  "星雲": "Nebula"
 }

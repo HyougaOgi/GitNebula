@@ -71,6 +71,44 @@ import AppKit
         let saved = AppearanceSettings(defaults: defaults)
         XCTAssertEqual(saved.theme, .light); XCTAssertEqual(saved.language, .en); XCTAssertEqual(saved.transparency, 0.45)
         XCTAssertNil(AppTheme.system.scheme); XCTAssertEqual(AppTheme.dark.scheme, .dark)
+        XCTAssertEqual(AppLanguage.allCases, [.ja, .en])
+        defaults.set("system", forKey: "appLanguage")
+        let migrated = AppearanceSettings(defaults: defaults)
+        XCTAssertEqual(migrated.language.code, Localization.preferredLanguage)
+        XCTAssertEqual(defaults.string(forKey: "appLanguage"), migrated.language.code)
+    }
+    func testSystemThemeFollowsAppearanceChangesAndTransparencyHasRealAlpha() async throws {
+        let settings = AppearanceSettings.shared
+        let oldTheme = settings.theme, oldTransparency = settings.transparency, oldAppearance = NSApp.appearance
+        defer { settings.theme = oldTheme; settings.transparency = oldTransparency; NSApp.appearance = oldAppearance }
+        settings.theme = .system
+        NSApp.appearance = NSAppearance(named: .darkAqua)
+        try await wait { settings.colorScheme == .dark }
+        NSApp.appearance = NSAppearance(named: .aqua)
+        try await wait { settings.colorScheme == .light }
+        settings.theme = .dark
+        XCTAssertEqual(settings.colorScheme, .dark)
+        settings.theme = .system
+        XCTAssertEqual(settings.colorScheme, .light)
+        let host = TransparentHostingView(rootView: AppearanceScope { Color.clear.frame(width: 320, height: 200).background(NebulaBackground()) })
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 320, height: 200), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.isOpaque = false; window.backgroundColor = .clear
+        window.contentView = host; window.makeKeyAndOrderFront(nil)
+        defer { window.close() }
+        func alpha() throws -> CGFloat {
+            host.layoutSubtreeIfNeeded()
+            let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            return try XCTUnwrap(bitmap.colorAt(x: 30, y: 30)).alphaComponent
+        }
+        settings.transparency = 0
+        try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertGreaterThan(try alpha(), 0.95)
+        settings.transparency = 0.8
+        try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertLessThan(try alpha(), 0.3, "The background must expose the desktop, not merely change its color")
+        XCTAssertFalse(host.isOpaque)
+        try capture(host, name: "background-transparent")
     }
     func testEnglishNeverTranslatesUserPathsOrMessages() {
         let old = UserDefaults.standard.object(forKey: "appLanguage")

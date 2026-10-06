@@ -4,7 +4,7 @@ namespace GitNebula;
 public static class Localization
 {
     private static readonly Dictionary<string, string> English = Load();
-    public static string Language => AppSettings.Current.Language == "system" ? (CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "ja" ? "ja" : "en") : AppSettings.Current.Language;
+    public static string Language => AppSettings.Current.Language == "en" ? "en" : "ja";
     private static Dictionary<string, string> Load()
     {
         using var stream = typeof(Localization).Assembly.GetManifestResourceStream("GitNebula.en.json");

@@ -15,7 +15,7 @@ Normal startup stays in the system tray without a window. Clicking the tray icon
 
 **詳細設定 → SSH 認証** accepts a private-key path and masked passphrase. The path is saved in `%LOCALAPPDATA%\GitNebula\settings.json`; the passphrase is stored separately in Windows Credential Manager. Clone/Fetch/Pull/Push use the selected key and automatically provide the saved phrase only to that key's prompt. The saved phrase remains filled and masked when settings reopen. Leaving the phrase blank preserves the saved value; the delete button removes it. Leaving the key blank uses existing SSH configuration/agent. New host fingerprints still require confirmation; HTTPS uses Git's credential helper.
 
-Detailed settings include a transparency slider, System / Light / Dark appearance, and System / Japanese / English language, applied immediately. Home displays an animated Nebula icon and twinkling stars; animations pause when hidden. Back returns to the previous screen and preserves the commit draft. Commit is directly accessible from working screens and first in the Changes category.
+Detailed settings include a transparency slider, System / Light / Dark appearance, and Japanese / English language, applied immediately. Home displays flowing nebula gas clouds and twinkling stars; animations pause when hidden. Back returns to the previous screen and preserves the commit draft. Commit is directly accessible from working screens and first in the Changes category.
 
 **History → Git Graph** displays colored branch lanes, merges and selectable commits, with details below and additional pages of history. Pull reports changed HEAD, commit/file counts or an already-current result; Fetch and Push retain their Git output.
 

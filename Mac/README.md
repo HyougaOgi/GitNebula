@@ -24,7 +24,7 @@ Detailed settings include **SSH 認証**: select a readable private key (not its
 
 Cherry-pick and Revert each open a dedicated commit selector with an execute button and confirmation. Rebase and Merge each open a dedicated branch selector. These screens contain no working-file diff list. A welcome or Finder request during a Git operation waits for completion before changing screens. Unstage accepts mixed selections and removes only staged changes, preserving working and untracked files. Push explains when an initial commit or branch selection is required.
 
-Detailed settings also include a **Transparency** slider (0–80%), **System / Light / Dark** appearance, and **System / Japanese / English** language. Changes apply immediately and persist. The macOS slider changes the window background while keeping text and controls opaque. Home uses the animated Nebula icon and independently twinkling stars. Animation pauses while the window is hidden and respects Reduce Motion.
+Detailed settings also include a **Transparency** slider (0–80%), **System / Light / Dark** appearance, and **Japanese / English** language. Changes apply immediately and persist. The macOS slider changes the actual background alpha, exposing the windows behind it while keeping text and controls opaque. System appearance follows macOS changes immediately. Home shows slowly moving nebula gas and independently twinkling stars. Animation pauses while the window is hidden and respects Reduce Motion.
 
 **履歴 → Git グラフ** shows colored branch lanes, merge parents, commit IDs, messages and branch/tag labels. Select a commit and use **コミットを開く**, or double-click it, to view changed files. More history can be loaded in pages of 200.
 
@@ -83,3 +83,5 @@ bash Mac/package.sh --signed
 ```
 
 The script signs the extension and application, verifies their signatures, submits the app for notarization, staples and validates the ticket, and creates a ZIP with a SHA-256 checksum. Signing and notarization need your own credentials and network access to Apple's services. Build on each intended CPU architecture; the script packages the host architecture.
+
+Opening detailed settings only checks whether a passphrase is saved; it never retrieves the protected value or requests Keychain authentication. A saved value appears masked. Typing replaces the mask through the native macOS secure text editor; Shift letters and symbols are entered once. The protected value is retrieved when Git needs SSH authentication.

@@ -1,4 +1,6 @@
 import XCTest
+import SwiftUI
+import AppKit
 @testable import GitNebula
 
 @MainActor
@@ -6,7 +8,8 @@ final class SSHTests: LocalizedTestCase {
     final class Secrets: SSHSecretStore {
         var values: [String: String] = [:]
         var failSave = false
-        func read(for key: String) throws -> String? { values[key] }
+        var reads = 0
+        func read(for key: String) throws -> String? { reads += 1; return values[key] }
         func contains(key: String) throws -> Bool { values[key] != nil }
         func save(_ passphrase: String, for key: String) throws {
             if failSave { throw NSError(domain: "Test", code: 1, userInfo: [NSLocalizedDescriptionKey: "store unavailable"]) }
@@ -28,13 +31,42 @@ final class SSHTests: LocalizedTestCase {
         let settings = SSHSettings(defaults: defaults, store: store)
         settings.keyPath = "\"" + key.path + "\""; settings.passphrase = "test-only passphrase"
         settings.save()
-        XCTAssertFalse(settings.failed); XCTAssertEqual(settings.keyPath, key.path); XCTAssertEqual(settings.passphrase, "test-only passphrase"); XCTAssertTrue(settings.hasSavedPassphrase)
+        XCTAssertFalse(settings.failed); XCTAssertEqual(settings.keyPath, key.path); XCTAssertEqual(settings.passphrase, SSHSettings.savedMask); XCTAssertTrue(settings.hasSavedPassphrase)
         XCTAssertEqual(store.values[key.path], "test-only passphrase")
         XCTAssertEqual(defaults.string(forKey: "sshKeyPath"), key.path)
         XCTAssertFalse(String(describing: defaults.dictionaryRepresentation()).contains("test-only passphrase"))
         settings.save(); XCTAssertEqual(store.values[key.path], "test-only passphrase")
+        XCTAssertEqual(store.reads, 0, "Opening, saving and refreshing settings never read the protected secret")
+        let reopened = SSHSettings(defaults: defaults, store: store)
+        XCTAssertEqual(reopened.passphrase, SSHSettings.savedMask); XCTAssertTrue(reopened.showsSavedPassphrase)
+        XCTAssertEqual(store.reads, 0)
         settings.forgetPassphrase(); XCTAssertFalse(settings.failed); XCTAssertNil(store.values[key.path])
         settings.keyPath = ""; settings.save(); XCTAssertFalse(settings.failed); XCTAssertEqual(defaults.string(forKey: "sshKeyPath"), "")
+    }
+    func testNativeSecureFieldShiftInputAndSavedMaskReplacement() async throws {
+        let (root, defaults, store) = try fixture(), key = root.appendingPathComponent("id_ed25519")
+        try "test private key".write(to: key, atomically: true, encoding: .utf8)
+        defaults.set(key.path, forKey: "sshKeyPath"); store.values[key.path] = "previous protected value"
+        let settings = SSHSettings(defaults: defaults, store: store)
+        let host = NSHostingView(rootView: NativeSecureField(text: Binding(get: { settings.passphrase }, set: { settings.passphrase = $0 }), showsSavedValue: settings.showsSavedPassphrase, placeholder: "Passphrase").frame(width: 300, height: 28).padding())
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 340, height: 100), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host; window.makeKeyAndOrderFront(nil)
+        defer { window.close() }
+        func children(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + children($0) } }
+        for _ in 0..<100 where !children(host).contains(where: { $0 is NSSecureTextField }) { try await Task.sleep(nanoseconds: 20_000_000) }
+        let field = try XCTUnwrap(children(host).compactMap { $0 as? NSSecureTextField }.first)
+        XCTAssertEqual(field.stringValue, SSHSettings.savedMask)
+        XCTAssertTrue(window.makeFirstResponder(field))
+        let editor = try XCTUnwrap(field.currentEditor() as? NSTextView)
+        for (characters, unmodified, code) in [("A", "a", UInt16(0)), ("!", "1", UInt16(18)), ("Z", "z", UInt16(6))] {
+            let event = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .shift, timestamp: 0, windowNumber: window.windowNumber, context: nil, characters: characters, charactersIgnoringModifiers: unmodified, isARepeat: false, keyCode: code))
+            editor.keyDown(with: event)
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertEqual(field.stringValue, "A!Z", "Each shifted keystroke enters exactly one character")
+        XCTAssertEqual(settings.passphrase, "A!Z", "Typing replaces the saved mask")
+        XCTAssertEqual(store.reads, 0)
+        settings.save(); XCTAssertEqual(store.values[key.path], "A!Z")
     }
     func testInvalidKeysAndStoreFailureDoNotReportSuccessOrChangeConfiguration() throws {
         let (root, defaults, store) = try fixture()

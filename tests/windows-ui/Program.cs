@@ -131,7 +131,8 @@ internal static class Program
                 await window.ShowRequest(new LaunchRequest("settings", [])); await Wait();
                 Find<ComboBox>("ThemeChoice").SelectedIndex = 1;
                 Find<Slider>("TransparencyChoice").Value = .4;
-                Find<ComboBox>("LanguageChoice").SelectedIndex = 2;
+                Check(Find<ComboBox>("LanguageChoice").Items.Count == 2, "language has only Japanese and English");
+                Find<ComboBox>("LanguageChoice").SelectedIndex = 1;
                 Check(AppSettings.Current.Theme == "light" && AppSettings.Current.Language == "en" && Math.Abs(window.Opacity - .6) < .001, "appearance controls apply and persist");
                 Check(Find<Button>("BackButton").Content as string == "Back", "language changes apply immediately");
                 Console.WriteLine("PASS: WPF action routing, selected-file commit, preview, modes and feedback");

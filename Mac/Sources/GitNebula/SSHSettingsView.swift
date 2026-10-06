@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 
 @MainActor final class SSHSettings: ObservableObject {
+    static let savedMask = "••••••••"
     @Published var keyPath: String
     @Published var passphrase = "" { didSet { if !loadingPassphrase { passphraseEdited = true } } }
     @Published private(set) var hasSavedPassphrase = false
@@ -17,11 +18,12 @@ import AppKit
     }
     func refreshSavedPassphrase() {
         loadingPassphrase = true
-        let saved = try? store.read(for: (try? LaunchRequest.inputPath(keyPath)) ?? keyPath)
-        hasSavedPassphrase = saved != nil
-        passphrase = saved ?? ""
+        // Opening settings must not read a protected secret or request authentication.
+        hasSavedPassphrase = !keyPath.isEmpty && ((try? store.contains(key: (try? LaunchRequest.inputPath(keyPath)) ?? keyPath)) == true)
+        passphrase = hasSavedPassphrase ? Self.savedMask : ""
         passphraseEdited = false; loadingPassphrase = false
     }
+    var showsSavedPassphrase: Bool { hasSavedPassphrase && !passphraseEdited }
     func save() {
         do {
             let key = keyPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "" : try LaunchRequest.inputPath(keyPath)
@@ -64,7 +66,8 @@ struct SSHSettingsView: View {
                 Button(L("選択…"), action: settings.chooseKey)
             }
             Text(L("鍵のパスフレーズ"))
-            SecureField(L("パスフレーズ"), text: $settings.passphrase).textFieldStyle(.roundedBorder).accessibilityIdentifier("sshPassphrase")
+            NativeSecureField(text: $settings.passphrase, showsSavedValue: settings.showsSavedPassphrase, placeholder: L("パスフレーズ"))
+                .frame(height: 28)
                 .onChange(of: settings.keyPath) { _ in settings.refreshSavedPassphrase() }
             if settings.hasSavedPassphrase { Label(L("設定済み"), systemImage: "checkmark.circle.fill").font(.caption).foregroundStyle(.secondary) }
             Text(L("パスフレーズはキーチェーンに保存し、接続時に自動で使用します。")).font(.caption).foregroundStyle(.secondary)

@@ -100,7 +100,7 @@ final class ScreenNavigation: ObservableObject {
             previous.model?.isScreenActive = false
         }
         let callbacks = actions()
-        let host = NSHostingView(rootView: AnyView(AppearanceScope { view.environment(\.screenActions, callbacks) }))
+        let host = TransparentHostingView(rootView: AnyView(AppearanceScope { view.environment(\.screenActions, callbacks) }))
         let frame = Frame(host: host, model: model, title: title)
         model?.isScreenActive = true
         frames.append(frame)

@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import LocalAuthentication
 
 protocol SSHSecretStore {
     func read(for key: String) throws -> String?
@@ -30,6 +31,8 @@ struct SSHKeychain: SSHSecretStore {
     }
     func contains(key: String) throws -> Bool {
         var query = query(key); query[kSecReturnAttributes as String] = true
+        let context = LAContext(); context.interactionNotAllowed = true
+        query[kSecUseAuthenticationContext as String] = context
         let status = SecItemCopyMatching(query as CFDictionary, nil)
         if status == errSecItemNotFound { return false }
         try check(status); return true

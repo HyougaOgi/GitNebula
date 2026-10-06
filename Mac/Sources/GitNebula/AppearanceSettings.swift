@@ -7,9 +7,9 @@ enum AppTheme: String, CaseIterable {
     var scheme: ColorScheme? { self == .system ? nil : self == .light ? .light : .dark }
 }
 enum AppLanguage: String, CaseIterable {
-    case system, ja, en
-    var title: String { switch self { case .system: return L("システム"); case .ja: return L("日本語"); case .en: return "English" } }
-    var code: String { self == .system ? (Locale.preferredLanguages.first?.hasPrefix("ja") == true ? "ja" : "en") : rawValue }
+    case ja, en
+    var title: String { self == .ja ? L("日本語") : "English" }
+    var code: String { rawValue }
 }
 @MainActor final class AppearanceSettings: ObservableObject {
     static let shared = AppearanceSettings()
@@ -18,11 +18,27 @@ enum AppLanguage: String, CaseIterable {
     @Published var theme: AppTheme { didSet { save() } }
     @Published var language: AppLanguage { didSet { save() } }
     @Published var transparency: Double { didSet { save() } }
+    @Published private(set) var systemScheme: ColorScheme
+    private var systemAppearanceObserver: NSKeyValueObservation?
+    var colorScheme: ColorScheme { theme.scheme ?? systemScheme }
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         theme = AppTheme(rawValue: defaults.string(forKey: "appTheme") ?? "system") ?? .system
-        language = AppLanguage(rawValue: defaults.string(forKey: "appLanguage") ?? "system") ?? .system
+        language = AppLanguage(rawValue: defaults.string(forKey: "appLanguage") ?? "") ?? (Localization.preferredLanguage == "ja" ? .ja : .en)
         transparency = min(0.8, max(0, defaults.double(forKey: "windowTransparency")))
+        systemScheme = Self.scheme(for: NSApplication.shared.effectiveAppearance)
+        // Migrate the former automatic language option to an explicit choice.
+        defaults.set(language.rawValue, forKey: "appLanguage")
+        systemAppearanceObserver = NSApplication.shared.observe(\.effectiveAppearance, options: [.new]) { [weak self] application, _ in
+            let scheme = Self.scheme(for: application.effectiveAppearance)
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.systemScheme != scheme else { return }
+                self.systemScheme = scheme
+            }
+        }
+    }
+    nonisolated static func scheme(for appearance: NSAppearance) -> ColorScheme {
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .dark : .light
     }
     private func save() {
         defaults.set(theme.rawValue, forKey: "appTheme"); defaults.set(language.rawValue, forKey: "appLanguage")
@@ -51,14 +67,13 @@ struct AppearanceSettingsView: View {
     }
 }
 
-// Native vibrancy changes only the background; text and controls stay opaque.
-struct WindowBackdrop: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView(); view.material = .underWindowBackground
-        view.blendingMode = .behindWindow; view.state = .active
-        return view
+// No opaque hosting/material layer may cover the window's alpha background.
+final class TransparentHostingView<Content: View>: NSHostingView<Content> {
+    override var isOpaque: Bool { false }
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        wantsLayer = true; layer?.backgroundColor = NSColor.clear.cgColor
     }
-    func updateNSView(_ view: NSVisualEffectView, context: Context) { }
 }
 
 struct AppearanceScope<Content: View>: View {
@@ -66,7 +81,7 @@ struct AppearanceScope<Content: View>: View {
     @ViewBuilder var content: () -> Content
     var body: some View {
         content().environment(\.locale, Locale(identifier: settings.language.code))
-            .preferredColorScheme(settings.theme.scheme)
+            .environment(\.colorScheme, settings.colorScheme)
             .tint(Color.accentColor)
             .background(NativeWindowTheme(theme: settings.theme))
     }

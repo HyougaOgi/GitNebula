@@ -33,7 +33,7 @@
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
         <ScrollViewer Grid.Row="1" x:Name="HomePanel" VerticalScrollBarVisibility="Auto">
           <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,70">
-            <Canvas x:Name="NebulaIcon" Width="160" Height="160" HorizontalAlignment="Center" Margin="0,0,0,24"/>
+            <Canvas x:Name="NebulaScene" Width="360" Height="210" HorizontalAlignment="Center" Margin="0,0,0,24" AutomationProperties.Name="星雲"/>
             <TextBlock Text="GitNebula" FontSize="38" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,0,0,24"/>
             <Button Content="詳細設定" FontSize="17" Tag="settings" Click="Navigate_Click" HorizontalAlignment="Center" Style="{StaticResource PrimaryButton}"/>
           </StackPanel>
@@ -99,7 +99,7 @@
         <ScrollViewer Grid.Row="1" x:Name="SettingsPanel" VerticalScrollBarVisibility="Auto"><StackPanel>
           <TextBlock Text="表示" FontSize="18" FontWeight="Bold"/><ComboBox x:Name="ThemeChoice" SelectionChanged="Appearance_Changed" Margin="0,8"><ComboBoxItem Content="システム" Tag="system"/><ComboBoxItem Content="ライト" Tag="light"/><ComboBoxItem Content="ダーク" Tag="dark"/></ComboBox>
           <DockPanel Margin="0,8"><TextBlock Text="透明度"/><TextBlock x:Name="TransparencyValue" DockPanel.Dock="Right"/><Slider x:Name="TransparencyChoice" Minimum="0" Maximum="0.8" ValueChanged="Transparency_Changed"/></DockPanel>
-          <ComboBox x:Name="LanguageChoice" SelectionChanged="Appearance_Changed" Margin="0,8,0,20"><ComboBoxItem Content="システム" Tag="system"/><ComboBoxItem Content="日本語" Tag="ja"/><ComboBoxItem Content="English" Tag="en"/></ComboBox>
+          <ComboBox x:Name="LanguageChoice" SelectionChanged="Appearance_Changed" Margin="0,8,0,20"><ComboBoxItem Content="日本語" Tag="ja"/><ComboBoxItem Content="English" Tag="en"/></ComboBox>
           <CheckBox x:Name="KeepRunning" Content="閉じてもシステムトレイに常駐する" Foreground="{DynamicResource TextBrush}"/>
           <TextBlock Text="トレイアイコンをクリックするとアプリ画面を表示します。" TextWrapping="Wrap" Margin="0,12"/>
           <TextBlock Text="Git の実行ファイル（空欄なら自動検出）"/><TextBox x:Name="GitExecutable" Margin="0,8"/><TextBlock x:Name="GitDetected" TextWrapping="Wrap"/>

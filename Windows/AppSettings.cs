@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Globalization;
 namespace GitNebula;
 
 public sealed class AppSettings
@@ -6,7 +7,8 @@ public sealed class AppSettings
     private static readonly string FilePath = Environment.GetEnvironmentVariable("GITNEBULA_SETTINGS_PATH") ?? System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GitNebula", "settings.json");
     public static AppSettings Current { get; } = Load();
     public string Theme { get; set; } = "system";
-    public string Language { get; set; } = "system";
+    public string Language { get; set; } = DefaultLanguage;
+    private static string DefaultLanguage => CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "ja" ? "ja" : "en";
     public double Transparency { get; set; }
     public bool ShowHomeOnLaunch { get; set; }
     public bool KeepRunning { get; set; } = true;
@@ -15,7 +17,11 @@ public sealed class AppSettings
     public List<string> RecentRepositories { get; set; } = [];
     private static AppSettings Load()
     {
-        try { return JsonSerializer.Deserialize<AppSettings>(System.IO.File.ReadAllText(FilePath)) ?? new(); }
+        try {
+            var settings = JsonSerializer.Deserialize<AppSettings>(System.IO.File.ReadAllText(FilePath)) ?? new();
+            if (settings.Language is not ("ja" or "en")) settings.Language = DefaultLanguage;
+            return settings;
+        }
         catch (System.IO.FileNotFoundException) { return new(); }
         catch (System.IO.DirectoryNotFoundException) { return new(); }
         catch (JsonException) { return new(); }

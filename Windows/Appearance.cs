@@ -19,8 +19,9 @@ public partial class MainWindow
                 Capture(child);
             }
         }
-        Capture(this); DrawIcon(); ApplyAppearance();
+        Capture(this); DrawNebula(); ApplyAppearance();
         IsVisibleChanged += (_, _) => AnimateVisible();
+        HomePanel.IsVisibleChanged += (_, _) => AnimateVisible();
         SystemEvents.UserPreferenceChanged += SystemAppearanceChanged;
         Closed += (_, _) => SystemEvents.UserPreferenceChanged -= SystemAppearanceChanged;
     }
@@ -55,7 +56,7 @@ public partial class MainWindow
         TransparencyValue.Text = $"{(int)(AppSettings.Current.Transparency * 100)}%";
         foreach (var (element, property, source) in labels) element.SetValue(property, Localization.Text(source));
         foreach (var item in ThemeChoice.Items.OfType<ComboBoxItem>()) item.Content = Localization.Text((string)item.Tag switch { "light" => Localization.Text("ライト"), "dark" => Localization.Text("ダーク"), _ => Localization.Text("システム") });
-        foreach (var item in LanguageChoice.Items.OfType<ComboBoxItem>()) item.Content = (string)item.Tag switch { "ja" => Localization.Text("日本語"), "en" => "English", _ => Localization.Text("システム") };
+        foreach (var item in LanguageChoice.Items.OfType<ComboBoxItem>()) item.Content = (string)item.Tag == "en" ? "English" : Localization.Text("日本語");
         if (CommitList.View is GridView grid) { grid.Columns[1].Header = Localization.Text("コミット"); grid.Columns[2].Header = Localization.Text("作成者"); }
         OtherActions.Items.Clear(); OtherActions.Items.Add(new ComboBoxItem { Content = Localization.Text("機能を選ぶ…"), Tag = "placeholder" });
         foreach (var group in LaunchRequest.MenuGroups) {
@@ -77,17 +78,19 @@ public partial class MainWindow
         catch (Exception error) { SshPassphrase.Clear(); Status.Text = error.Message; }
     }
     private void SshKey_Changed(object sender, TextChangedEventArgs e) { if (initialized) LoadSavedPassphrase(); }
-    private void DrawIcon()
+    private void DrawNebula()
     {
-        var background = new System.Windows.Shapes.Rectangle { Width = 148, Height = 148, RadiusX = 32, RadiusY = 32, Fill = new LinearGradientBrush(Color.FromRgb(20,26,64), Color.FromRgb(94,61,163), 45) };
-        Canvas.SetLeft(background, 6); Canvas.SetTop(background, 6); NebulaIcon.Children.Add(background);
-        var orbit = new Ellipse { Width = 116, Height = 105, Stroke = Brushes.Lavender, StrokeThickness = 2, Opacity = .3 }; Canvas.SetLeft(orbit, 22); Canvas.SetTop(orbit, 25); NebulaIcon.Children.Add(orbit);
-        NebulaIcon.Children.Add(new Line { X1 = 59, X2 = 59, Y1 = 46, Y2 = 115, Stroke = Brushes.Lavender, StrokeThickness = 9, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round });
-        var curve = new PathFigure { StartPoint = new Point(59,89) }; curve.Segments.Add(new BezierSegment(new Point(59,67), new Point(103,83), new Point(103,49), true));
-        NebulaIcon.Children.Add(new System.Windows.Shapes.Path { Data = new PathGeometry([curve]), Stroke = Brushes.Lavender, StrokeThickness = 9 });
-        foreach (var (x,y) in new[] { (59,115), (59,45), (103,47) }) { var node = new Ellipse { Width = 20, Height = 20, Fill = Brushes.MediumPurple, Stroke = Brushes.White, StrokeThickness = 2 }; Canvas.SetLeft(node,x-10); Canvas.SetTop(node,y-10); NebulaIcon.Children.Add(node); }
-        var point = new Ellipse { Width = 7, Height = 7, Fill = Brushes.Cyan }; Canvas.SetLeft(point, 134); Canvas.SetTop(point, 73); NebulaIcon.Children.Add(point);
-        point.RenderTransform = new RotateTransform(0, -54, 3.5);
+        var palette = new[] { Color.FromArgb(75, 122, 59, 230), Color.FromArgb(75, 51, 156, 219), Color.FromArgb(75, 235, 77, 130) };
+        for (var index = 0; index < 84; index++) {
+            var phase = index * 2.39996; var spread = Math.Sqrt(index / 84.0); var radius = 12 + index % 9 * 3;
+            var cloud = new Ellipse { Width = radius * 2.6, Height = radius * 2, Fill = new RadialGradientBrush(palette[index % 3], Colors.Transparent), RenderTransform = new TranslateTransform(), Tag = index };
+            Canvas.SetLeft(cloud, 180 + Math.Cos(phase) * spread * 360 * .32 - radius * 1.3); Canvas.SetTop(cloud, 210 * .48 + Math.Sin(phase) * spread * 210 * .28 - radius);
+            NebulaScene.Children.Add(cloud);
+        }
+        for (var index = 0; index < 42; index++) {
+            var star = new Ellipse { Width = index % 11 == 0 ? 2.8 : 1.3, Height = index % 11 == 0 ? 2.8 : 1.3, Fill = Brushes.White, Opacity = .65 };
+            Canvas.SetLeft(star, (index * 137 + 23) % 997 / 997.0 * 360); Canvas.SetTop(star, (index * 239 + 67) % 991 / 991.0 * 210); NebulaScene.Children.Add(star);
+        }
     }
     private void AnimateVisible()
     {
@@ -95,9 +98,16 @@ public partial class MainWindow
             star.BeginAnimation(OpacityProperty, null);
             if (IsVisible && SystemParameters.ClientAreaAnimation) star.BeginAnimation(OpacityProperty, new DoubleAnimation(.12, .7, TimeSpan.FromSeconds(3 + animationRandom.NextDouble() * 9)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, BeginTime = TimeSpan.FromSeconds(animationRandom.NextDouble() * 3) });
         }
-        if (NebulaIcon.Children.OfType<Ellipse>().LastOrDefault()?.RenderTransform is RotateTransform rotation) {
-            rotation.BeginAnimation(RotateTransform.AngleProperty, null);
-            if (IsVisible && SystemParameters.ClientAreaAnimation) rotation.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(0,360,TimeSpan.FromSeconds(16)) { RepeatBehavior = RepeatBehavior.Forever });
+        foreach (var cloud in NebulaScene.Children.OfType<Ellipse>()) {
+            cloud.BeginAnimation(OpacityProperty, null);
+            if (cloud.RenderTransform is not TranslateTransform drift) continue;
+            drift.BeginAnimation(TranslateTransform.XProperty, null); drift.BeginAnimation(TranslateTransform.YProperty, null);
+            if (!IsVisible || !HomePanel.IsVisible || !SystemParameters.ClientAreaAnimation) continue;
+            var period = TimeSpan.FromSeconds(10 + (int)cloud.Tag % 7);
+            var delay = TimeSpan.FromSeconds((int)cloud.Tag % 9 * .4);
+            drift.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(-9, 9, period) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, BeginTime = delay });
+            drift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(-8, 8, period) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, BeginTime = delay });
+            cloud.BeginAnimation(OpacityProperty, new DoubleAnimation(.6, 1, period) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, BeginTime = delay });
         }
     }
 }

@@ -22,6 +22,7 @@ struct AppText: ExpressibleByStringLiteral, ExpressibleByStringInterpolation {
 func L(_ value: AppText) -> String { value.value }
 func LT(_ value: String) -> String { Localization.text(value) }
 enum Localization {
+    static var preferredLanguage: String { Locale.preferredLanguages.first?.hasPrefix("ja") == true ? "ja" : "en" }
     static let changed = Notification.Name("dev.gitnebula.languageChanged")
     static let request = Notification.Name("dev.gitnebula.languageRequested")
     #if FINDER_EXTENSION
@@ -33,7 +34,7 @@ enum Localization {
         #endif
         let defaults = UserDefaults(suiteName: "dev.gitnebula.desktop") ?? .standard
         let selected = UserDefaults.standard.string(forKey: "appLanguage") ?? defaults.string(forKey: "appLanguage") ?? "system"
-        return selected == "system" ? (Locale.preferredLanguages.first?.hasPrefix("ja") == true ? "ja" : "en") : selected
+        return selected == "ja" || selected == "en" ? selected : preferredLanguage
     }
     private static let english: [String: String] = {
         var resource = Bundle.main.resourceURL?.appendingPathComponent("en.json")

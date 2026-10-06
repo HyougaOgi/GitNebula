@@ -26,18 +26,16 @@ private struct VisibilityProbe: NSViewRepresentable {
     func updateNSView(_ view: Probe, context: Context) { view.update = { visible = $0 } }
 }
 struct NebulaBackground: View {
-    @ObservedObject private var appearance = AppearanceSettings.shared
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var settings = AppearanceSettings.shared
     @State private var visible = false
     var body: some View {
         ZStack {
-            WindowBackdrop()
-            (scheme == .dark ? Color(red: 0.035, green: 0.05, blue: 0.11) : Color(red: 0.96, green: 0.96, blue: 0.99)).opacity(1 - settings.transparency)
+            (scheme == .dark ? Color(red: 0.035, green: 0.05, blue: 0.11) : Color(red: 0.96, green: 0.96, blue: 0.99))
             RadialGradient(colors: [.purple.opacity(scheme == .dark ? 0.2 : 0.09), .clear], center: .topTrailing, startRadius: 0, endRadius: 700)
             RadialGradient(colors: [.cyan.opacity(0.08), .clear], center: .bottomLeading, startRadius: 0, endRadius: 600)
-            TimelineView(.animation(minimumInterval: 1 / 20, paused: !visible || reduceMotion)) { timeline in
+            TimelineView(.animation(minimumInterval: 1 / 12, paused: !visible || reduceMotion)) { timeline in
                 Canvas { context, size in
                     let time = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
                     for star in NebulaStar.field {
@@ -47,40 +45,55 @@ struct NebulaBackground: View {
                 }
             }
             VisibilityProbe(visible: $visible).frame(width: 0, height: 0)
-        }.allowsHitTesting(false).accessibilityHidden(true)
+        }.compositingGroup().opacity(1 - settings.transparency).allowsHitTesting(false).accessibilityHidden(true)
     }
 }
 
-struct AnimatedNebulaIcon: View {
-    @ObservedObject private var appearance = AppearanceSettings.shared
+/// Slowly flowing gas, luminous filaments and stars, rather than an animated app logo.
+struct NebulaScene: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var visible = false
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30, paused: !visible || reduceMotion)) { timeline in
+        TimelineView(.animation(minimumInterval: 1 / 18, paused: !visible || reduceMotion)) { timeline in
             Canvas { context, size in
-                let time = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
-                let scale = size.width / 1024
-                context.scaleBy(x: scale, y: scale)
-                let background = Path(roundedRect: CGRect(x: 40, y: 40, width: 944, height: 944), cornerRadius: 205)
-                context.fill(background, with: .linearGradient(Gradient(colors: [Color(red: 0.08, green: 0.1, blue: 0.25), Color(red: 0.37, green: 0.24, blue: 0.64)]), startPoint: .zero, endPoint: CGPoint(x: 1024, y: 1024)))
-                let orbit = Path(ellipseIn: CGRect(x: 140, y: 160, width: 740, height: 670))
-                context.stroke(orbit, with: .color(.white.opacity(0.25)), lineWidth: 14)
-                var branch = Path()
-                branch.move(to: CGPoint(x: 378, y: 736)); branch.addLine(to: CGPoint(x: 378, y: 300))
-                branch.move(to: CGPoint(x: 378, y: 572)); branch.addCurve(to: CGPoint(x: 660, y: 314), control1: CGPoint(x: 378, y: 429), control2: CGPoint(x: 660, y: 534))
-                context.stroke(branch, with: .color(Color(red: 0.86, green: 0.82, blue: 1)), style: StrokeStyle(lineWidth: 58, lineCap: .round))
-                for (index, point) in [CGPoint(x: 378, y: 738), CGPoint(x: 378, y: 286), CGPoint(x: 660, y: 298)].enumerated() {
-                    let radius = 64 + 5 * sin(time * 1.6 + Double(index) * 1.4)
-                    let node = Path(ellipseIn: CGRect(x: point.x - radius, y: point.y - radius, width: radius * 2, height: radius * 2))
-                    context.fill(node, with: .color(Color(red: 0.78, green: 0.72, blue: 1)))
-                    context.stroke(node, with: .color(.white), lineWidth: 14)
-                }
-                for index in 0..<3 {
-                    let angle = time * 0.4 + Double(index) * 2 * .pi / 3
-                    let center = CGPoint(x: 510 + cos(angle) * 370, y: 495 + sin(angle) * 335)
-                    context.fill(Path(ellipseIn: CGRect(x: center.x - 17, y: center.y - 17, width: 34, height: 34)), with: .color(.cyan.opacity(0.85)))
-                }
+                Self.draw(context: context, size: size, time: reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate)
             }
-        }.background(VisibilityProbe(visible: $visible)).accessibilityLabel("GitNebula").accessibilityIdentifier("animatedNebulaIcon")
+        }.background(VisibilityProbe(visible: $visible)).accessibilityLabel(L("星雲")).accessibilityIdentifier("nebulaScene")
     }
+    private static func draw(context original: GraphicsContext, size: CGSize, time: Double) {
+        let context = original
+        let width = Double(size.width), height = Double(size.height)
+        let palette: [Color] = [.init(red: 0.48, green: 0.23, blue: 0.9), .init(red: 0.2, green: 0.61, blue: 0.86), .init(red: 0.92, green: 0.3, blue: 0.51)]
+        for index in 0..<84 {
+            let phase = Double(index) * 2.39996
+            let spread = sqrt(Double(index) / 84)
+            let x = width * 0.5 + cos(phase) * spread * width * 0.32 + sin(time * 0.08 + phase) * 9
+            let y = height * 0.48 + sin(phase) * spread * height * 0.28 + cos(time * 0.1 + phase) * 7
+            let radius = 12 + Double(index % 9) * 3
+            let center = CGPoint(x: x, y: y)
+            let cloud = Path(ellipseIn: CGRect(x: x - radius * 1.4, y: y - radius, width: radius * 2.8, height: radius * 2))
+            let opacity = 0.24 + 0.08 * sin(time * 0.12 + phase)
+            context.fill(cloud, with: .radialGradient(Gradient(colors: [palette[index % 3].opacity(opacity), .clear]), center: center, startRadius: 0, endRadius: radius * 1.4))
+        }
+        // Small emission knots and intervening dust add texture without geometric lines.
+        for index in 0..<18 {
+            let phase = Double(index) * 2.7
+            let x = width * (0.5 + cos(phase) * 0.22) + sin(time * 0.05 + phase) * 4
+            let y = height * (0.48 + sin(phase) * 0.14)
+            let radius = 5 + Double(index % 5) * 2
+            let color = index % 3 == 0 ? Color(red: 0.03, green: 0.04, blue: 0.1).opacity(0.28) : Color(red: 0.99, green: 0.7, blue: 0.82).opacity(0.16)
+            context.fill(Path(ellipseIn: CGRect(x: x - radius * 2, y: y - radius, width: radius * 4, height: radius * 2)), with: .radialGradient(Gradient(colors: [color, .clear]), center: CGPoint(x: x, y: y), startRadius: 0, endRadius: radius * 2))
+        }
+        for index in 0..<42 {
+            let x = Double((index * 137 + 23) % 997) / 997 * width
+            let y = Double((index * 239 + 67) % 991) / 991 * height
+            let radius = index % 11 == 0 ? 1.4 : 0.65
+            let brightness = 0.35 + 0.3 * sin(time * 0.5 + Double(index))
+            if index % 11 == 0 {
+                context.fill(Path(ellipseIn: CGRect(x: x - 7, y: y - 7, width: 14, height: 14)), with: .radialGradient(Gradient(colors: [.cyan.opacity(0.45), .clear]), center: CGPoint(x: x, y: y), startRadius: 0, endRadius: 7))
+            }
+            context.fill(Path(ellipseIn: CGRect(x: x - radius, y: y - radius, width: radius * 2, height: radius * 2)), with: .color(.white.opacity(brightness)))
+        }
+    }
+
 }
