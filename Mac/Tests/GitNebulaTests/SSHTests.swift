@@ -9,6 +9,8 @@ final class SSHTests: LocalizedTestCase {
         var values: [String: String] = [:]
         var failSave = false
         var reads = 0
+        var migrationRequired = false
+        func needsMigration(for key: String) -> Bool { migrationRequired }
         func read(for key: String) throws -> String? { reads += 1; return values[key] }
         func contains(key: String) throws -> Bool { values[key] != nil }
         func save(_ passphrase: String, for key: String) throws {
@@ -117,6 +119,33 @@ final class SSHTests: LocalizedTestCase {
         for prompt in ["git@example.invalid's password: ", "Are you sure you want to continue connecting (yes/no)?", "Enter passphrase for key '/keys/another': ", "Enter passphrase for key '/keys/id_ed25519-other': "] {
             XCTAssertFalse(SSHConfiguration.isKeyPassphrasePrompt(prompt, keyPath: key))
         }
+    }
+    func testLegacyMaskedValueRequiresOneTimeResaveInsteadOfReportingSuccess() throws {
+        let (root, defaults, store) = try fixture(), key = root.appendingPathComponent("id_ed25519")
+        try "test private key".write(to: key, atomically: true, encoding: .utf8)
+        defaults.set(key.path, forKey: "sshKeyPath"); store.values[key.path] = "old saved value"; store.migrationRequired = true
+        let settings = SSHSettings(defaults: defaults, store: store)
+        XCTAssertTrue(settings.needsMigration); XCTAssertEqual(store.reads, 0)
+        settings.save(); XCTAssertTrue(settings.failed); XCTAssertEqual(store.reads, 0)
+        XCTAssertEqual(store.values[key.path], "old saved value")
+    }
+    func testSystemSSHStorePersistsValidatesAndDeletesWithoutAgentCache() throws {
+        let (root, _, _) = try fixture(), key = root.appendingPathComponent("encrypted key 星")
+        let process = Process(); process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh-keygen")
+        process.arguments = ["-q", "-t", "ed25519", "-N", "isolated-test-067", "-f", key.path]
+        process.standardOutput = FileHandle.nullDevice; process.standardError = FileHandle.nullDevice
+        try process.run(); process.waitUntilExit(); XCTAssertEqual(process.terminationStatus, 0)
+        let store = SSHSystemStore(legacy: SSHKeychain(service: "GitNebulaTest." + UUID().uuidString))
+        defer { try? store.remove(for: key.path) }
+        XCTAssertFalse(try store.contains(key: key.path))
+        XCTAssertThrowsError(try store.save("incorrect", for: key.path))
+        try store.save("isolated-test-067", for: key.path)
+        XCTAssertTrue(try store.contains(key: key.path))
+        XCTAssertThrowsError(try store.save("incorrect", for: key.path), "An existing correct value must not hide an invalid edit")
+        XCTAssertTrue(try store.contains(key: key.path))
+        XCTAssertNil(try store.read(for: key.path), "GitNebula never reads Apple's protected passphrase")
+        try store.remove(for: key.path)
+        XCTAssertFalse(try store.contains(key: key.path))
     }
     func testEncryptedKeyCloneFetchPullPushWithInstalledAskpass() throws {
         guard let fixturePath = ProcessInfo.processInfo.environment["GITNEBULA_SSH_TEST_FIXTURE"] else {

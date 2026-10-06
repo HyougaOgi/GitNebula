@@ -6,20 +6,23 @@ import AppKit
     @Published var keyPath: String
     @Published var passphrase = "" { didSet { if !loadingPassphrase { passphraseEdited = true } } }
     @Published private(set) var hasSavedPassphrase = false
+    @Published private(set) var needsMigration = false
     @Published var message = ""
     @Published var failed = false
     private let defaults: UserDefaults
     private let store: any SSHSecretStore
     private var loadingPassphrase = false
     private var passphraseEdited = false
-    init(defaults: UserDefaults = .standard, store: any SSHSecretStore = SSHKeychain()) {
+    init(defaults: UserDefaults = .standard, store: any SSHSecretStore = SSHSystemStore()) {
         self.defaults = defaults; self.store = store; keyPath = defaults.string(forKey: "sshKeyPath") ?? ""
         refreshSavedPassphrase()
     }
     func refreshSavedPassphrase() {
         loadingPassphrase = true
         // Opening settings must not read a protected secret or request authentication.
-        hasSavedPassphrase = !keyPath.isEmpty && ((try? store.contains(key: (try? LaunchRequest.inputPath(keyPath)) ?? keyPath)) == true)
+        let key = (try? LaunchRequest.inputPath(keyPath)) ?? keyPath
+        hasSavedPassphrase = !keyPath.isEmpty && ((try? store.contains(key: key)) == true)
+        needsMigration = !keyPath.isEmpty && store.needsMigration(for: key)
         passphrase = hasSavedPassphrase ? Self.savedMask : ""
         passphraseEdited = false; loadingPassphrase = false
     }
@@ -33,6 +36,9 @@ import AppKit
                     throw NSError(domain: "GitNebula", code: 1, userInfo: [NSLocalizedDescriptionKey: L("読み込み可能な秘密鍵を選択してください。公開鍵（.pub）は使用できません。")])
                 }
                 if passphraseEdited && !passphrase.isEmpty { try store.save(passphrase, for: key) }
+                else if store.needsMigration(for: key) {
+                    throw NSError(domain: "GitNebula.SSH", code: 1, userInfo: [NSLocalizedDescriptionKey: L("保存方式を更新するため、SSH 鍵のパスフレーズを一度入力して保存してください。")])
+                }
             } else if passphraseEdited && !passphrase.isEmpty {
                 throw NSError(domain: "GitNebula", code: 1, userInfo: [NSLocalizedDescriptionKey: L("パスフレーズを保存する秘密鍵を選択してください。")])
             }
@@ -69,7 +75,9 @@ struct SSHSettingsView: View {
             NativeSecureField(text: $settings.passphrase, showsSavedValue: settings.showsSavedPassphrase, placeholder: L("パスフレーズ"))
                 .frame(height: 28)
                 .onChange(of: settings.keyPath) { _ in settings.refreshSavedPassphrase() }
-            if settings.hasSavedPassphrase { Label(L("設定済み"), systemImage: "checkmark.circle.fill").font(.caption).foregroundStyle(.secondary) }
+            if settings.needsMigration {
+                Text(L("保存方式を更新するため、SSH 鍵のパスフレーズを一度入力して保存してください。")).font(.caption).foregroundStyle(.orange)
+            } else if settings.hasSavedPassphrase { Label(L("設定済み"), systemImage: "checkmark.circle.fill").font(.caption).foregroundStyle(.secondary) }
             Text(L("パスフレーズはキーチェーンに保存し、接続時に自動で使用します。")).font(.caption).foregroundStyle(.secondary)
             HStack {
                 Button(L("SSH 設定を保存"), action: settings.save).accessibilityIdentifier("saveSSHSettings")

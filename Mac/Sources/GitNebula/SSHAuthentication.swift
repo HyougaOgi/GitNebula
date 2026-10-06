@@ -7,13 +7,28 @@ protocol SSHSecretStore {
     func save(_ passphrase: String, for key: String) throws
     func remove(for key: String) throws
     func contains(key: String) throws -> Bool
+    func needsMigration(for key: String) -> Bool
 }
+extension SSHSecretStore { func needsMigration(for key: String) -> Bool { false } }
 
 struct SSHKeychain: SSHSecretStore {
     static let service = "dev.gitnebula.desktop.ssh"
+    private static let accessLock = NSRecursiveLock()
     var service = Self.service
     private func query(_ key: String) -> [String: Any] {
-        [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: key]
+        let context = LAContext(); context.interactionNotAllowed = true
+        return [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: key, kSecUseAuthenticationContext as String: context]
+    }
+    private func noninteractive<T>(_ body: () throws -> T) throws -> T {
+        Self.accessLock.lock(); defer { Self.accessLock.unlock() }
+        // LAContext alone does not suppress the ACL dialog for legacy file-based
+        // items. This flag is process-local, restored immediately, and never
+        // changes the Keychain's lock, ACL or system authentication preferences.
+        var previous: DarwinBoolean = true
+        try check(SecKeychainGetUserInteractionAllowed(&previous))
+        try check(SecKeychainSetUserInteractionAllowed(false))
+        defer { SecKeychainSetUserInteractionAllowed(previous.boolValue) }
+        return try body()
     }
     private func check(_ status: OSStatus) throws {
         guard status == errSecSuccess else {
@@ -21,34 +36,40 @@ struct SSHKeychain: SSHSecretStore {
         }
     }
     func read(for key: String) throws -> String? {
-        var query = query(key); query[kSecReturnData as String] = true; query[kSecMatchLimit as String] = kSecMatchLimitOne
-        var result: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        if status == errSecItemNotFound { return nil }
-        try check(status)
-        guard let data = result as? Data, let value = String(data: data, encoding: .utf8) else { throw NSError(domain: "GitNebula", code: 1) }
-        return value
+        try noninteractive {
+            var query = query(key); query[kSecReturnData as String] = true; query[kSecMatchLimit as String] = kSecMatchLimitOne
+            var result: CFTypeRef?
+            let status = SecItemCopyMatching(query as CFDictionary, &result)
+            if status == errSecItemNotFound { return nil }
+            try check(status)
+            guard let data = result as? Data, let value = String(data: data, encoding: .utf8) else { throw NSError(domain: "GitNebula", code: 1) }
+            return value
+        }
     }
     func contains(key: String) throws -> Bool {
-        var query = query(key); query[kSecReturnAttributes as String] = true
-        let context = LAContext(); context.interactionNotAllowed = true
-        query[kSecUseAuthenticationContext as String] = context
-        let status = SecItemCopyMatching(query as CFDictionary, nil)
-        if status == errSecItemNotFound { return false }
-        try check(status); return true
+        try noninteractive {
+            var query = query(key); query[kSecReturnAttributes as String] = true
+            let status = SecItemCopyMatching(query as CFDictionary, nil)
+            if status == errSecItemNotFound { return false }
+            try check(status); return true
+        }
     }
     func save(_ passphrase: String, for key: String) throws {
-        let data = Data(passphrase.utf8)
-        let status = SecItemUpdate(query(key) as CFDictionary, [kSecValueData as String: data] as CFDictionary)
-        if status == errSecItemNotFound {
-            var query = query(key); query[kSecValueData as String] = data
-            query[kSecAttrLabel as String] = "GitNebula SSH: " + URL(fileURLWithPath: key).lastPathComponent
-            try check(SecItemAdd(query as CFDictionary, nil))
-        } else { try check(status) }
+        try noninteractive {
+            let data = Data(passphrase.utf8)
+            let status = SecItemUpdate(query(key) as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+            if status == errSecItemNotFound {
+                var query = query(key); query[kSecValueData as String] = data
+                query[kSecAttrLabel as String] = "GitNebula SSH: " + URL(fileURLWithPath: key).lastPathComponent
+                try check(SecItemAdd(query as CFDictionary, nil))
+            } else { try check(status) }
+        }
     }
     func remove(for key: String) throws {
-        let status = SecItemDelete(query(key) as CFDictionary)
-        if status != errSecItemNotFound { try check(status) }
+        try noninteractive {
+            let status = SecItemDelete(query(key) as CFDictionary)
+            if status != errSecItemNotFound { try check(status) }
+        }
     }
 }
 
@@ -64,7 +85,7 @@ struct SSHConfiguration: Sendable {
         let wrapper = directory.appendingPathComponent("ssh")
         try """
         #!/bin/sh
-        exec "$GITNEBULA_SSH_EXECUTABLE" -i "$GITNEBULA_SSH_KEY" -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o NumberOfPasswordPrompts=1 "$@"
+        exec "$GITNEBULA_SSH_EXECUTABLE" -i "$GITNEBULA_SSH_KEY" -o UseKeychain=yes -o IdentityAgent=none -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o NumberOfPasswordPrompts=1 "$@"
 
         """.write(to: wrapper, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: wrapper.path)

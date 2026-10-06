@@ -49,51 +49,33 @@ struct NebulaBackground: View {
     }
 }
 
-/// Slowly flowing gas, luminous filaments and stars, rather than an animated app logo.
+/// A transparent GPU volume of turbulent gas; its timeline pauses when hidden.
 struct NebulaScene: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var visible = false
+    private static let epoch = Date()
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 18, paused: !visible || reduceMotion)) { timeline in
-            Canvas { context, size in
-                Self.draw(context: context, size: size, time: reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate)
+        ZStack {
+            TimelineView(.animation(minimumInterval: 1 / 18, paused: !visible || reduceMotion)) { timeline in
+                Canvas { context, size in
+                    let time = reduceMotion ? 0 : timeline.date.timeIntervalSince(Self.epoch)
+                    let renderSize = CGSize(width: size.width * 1.5, height: size.height * 1.5)
+                    if let gas = try? NebulaRenderer.shared?.image(size: renderSize, time: Float(time)) {
+                        context.draw(Image(decorative: gas, scale: 1.5), in: CGRect(origin: .zero, size: size))
+                    }
+                    for index in 0..<42 {
+                        let x = Double((index * 137 + 23) % 997) / 997 * size.width
+                        let y = Double((index * 239 + 67) % 991) / 991 * size.height
+                        let radius = index % 11 == 0 ? 1.2 : 0.6
+                        let brightness = 0.45 + 0.25 * sin(time * 0.5 + Double(index))
+                        if index % 11 == 0 {
+                            context.fill(Path(ellipseIn: CGRect(x: x - 5, y: y - 5, width: 10, height: 10)), with: .radialGradient(Gradient(colors: [.cyan.opacity(0.35), .clear]), center: CGPoint(x: x, y: y), startRadius: 0, endRadius: 5))
+                        }
+                        context.fill(Path(ellipseIn: CGRect(x: x - radius, y: y - radius, width: radius * 2, height: radius * 2)), with: .color(.white.opacity(brightness)))
+                    }
+                }
             }
-        }.background(VisibilityProbe(visible: $visible)).accessibilityLabel(L("星雲")).accessibilityIdentifier("nebulaScene")
+        }.background(VisibilityProbe(visible: $visible)).allowsHitTesting(false)
+            .accessibilityLabel(L("星雲")).accessibilityIdentifier("nebulaScene")
     }
-    private static func draw(context original: GraphicsContext, size: CGSize, time: Double) {
-        let context = original
-        let width = Double(size.width), height = Double(size.height)
-        let palette: [Color] = [.init(red: 0.48, green: 0.23, blue: 0.9), .init(red: 0.2, green: 0.61, blue: 0.86), .init(red: 0.92, green: 0.3, blue: 0.51)]
-        for index in 0..<84 {
-            let phase = Double(index) * 2.39996
-            let spread = sqrt(Double(index) / 84)
-            let x = width * 0.5 + cos(phase) * spread * width * 0.32 + sin(time * 0.08 + phase) * 9
-            let y = height * 0.48 + sin(phase) * spread * height * 0.28 + cos(time * 0.1 + phase) * 7
-            let radius = 12 + Double(index % 9) * 3
-            let center = CGPoint(x: x, y: y)
-            let cloud = Path(ellipseIn: CGRect(x: x - radius * 1.4, y: y - radius, width: radius * 2.8, height: radius * 2))
-            let opacity = 0.24 + 0.08 * sin(time * 0.12 + phase)
-            context.fill(cloud, with: .radialGradient(Gradient(colors: [palette[index % 3].opacity(opacity), .clear]), center: center, startRadius: 0, endRadius: radius * 1.4))
-        }
-        // Small emission knots and intervening dust add texture without geometric lines.
-        for index in 0..<18 {
-            let phase = Double(index) * 2.7
-            let x = width * (0.5 + cos(phase) * 0.22) + sin(time * 0.05 + phase) * 4
-            let y = height * (0.48 + sin(phase) * 0.14)
-            let radius = 5 + Double(index % 5) * 2
-            let color = index % 3 == 0 ? Color(red: 0.03, green: 0.04, blue: 0.1).opacity(0.28) : Color(red: 0.99, green: 0.7, blue: 0.82).opacity(0.16)
-            context.fill(Path(ellipseIn: CGRect(x: x - radius * 2, y: y - radius, width: radius * 4, height: radius * 2)), with: .radialGradient(Gradient(colors: [color, .clear]), center: CGPoint(x: x, y: y), startRadius: 0, endRadius: radius * 2))
-        }
-        for index in 0..<42 {
-            let x = Double((index * 137 + 23) % 997) / 997 * width
-            let y = Double((index * 239 + 67) % 991) / 991 * height
-            let radius = index % 11 == 0 ? 1.4 : 0.65
-            let brightness = 0.35 + 0.3 * sin(time * 0.5 + Double(index))
-            if index % 11 == 0 {
-                context.fill(Path(ellipseIn: CGRect(x: x - 7, y: y - 7, width: 14, height: 14)), with: .radialGradient(Gradient(colors: [.cyan.opacity(0.45), .clear]), center: CGPoint(x: x, y: y), startRadius: 0, endRadius: 7))
-            }
-            context.fill(Path(ellipseIn: CGRect(x: x - radius, y: y - radius, width: radius * 2, height: radius * 2)), with: .color(.white.opacity(brightness)))
-        }
-    }
-
 }

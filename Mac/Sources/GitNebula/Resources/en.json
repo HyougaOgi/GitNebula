@@ -611,5 +611,13 @@
   "git {0} が失敗しました（終了コード {1}）。\n{2}{3}{4}": "git {0} failed (exit code {1}).\n{2}{3}{4}",
   "フォルダの絶対パスを入力してください。": "Enter an absolute folder path.",
   "git {0} が失敗しました（終了コード {1}）。\n{2}{3}": "git {0} failed (exit code {1}).\n{2}{3}",
-  "星雲": "Nebula"
+  "星雲": "Nebula",
+  "保存して接続": "Save and Connect",
+  " のパスフレーズを入力してください。保存すると、次回から自動で使用します。": " passphrase. Save it to use it automatically next time.",
+  "保存方式を更新するため、SSH 鍵のパスフレーズを一度入力して保存してください。": "Enter and save your SSH key passphrase once to update its storage.",
+  "パスフレーズに改行は使用できません。": "A passphrase cannot contain line breaks.",
+  "鍵またはパスフレーズを確認してください。\n": "Check your key and passphrase.\n",
+  "パスフレーズを保存できませんでした。SSH の設定を確認してください。": "Could not save the passphrase. Check your SSH settings.",
+  "保存したパスフレーズを削除できませんでした。": "Could not delete the saved passphrase.",
+  "SSH の認証処理を起動できませんでした。": "Could not start SSH authentication."
 }
