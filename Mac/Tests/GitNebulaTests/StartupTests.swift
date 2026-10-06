@@ -34,7 +34,7 @@ final class StartupTests: XCTestCase {
         XCTAssertFalse(delegate.applicationShouldHandleReopen(NSApp, hasVisibleWindows: false))
         XCTAssertNil(delegate.window)
         let menu = delegate.makeResidentMenu()
-        XCTAssertEqual(menu.items.filter { !$0.isSeparatorItem }.map(\.title), ["ようこそを開く", "詳細設定…", "起動オプション", "GitNebula を終了"])
+        XCTAssertEqual(menu.items.filter { !$0.isSeparatorItem }.map(\.title), ["GitNebula を開く", "詳細設定…", "起動オプション", "GitNebula を終了"])
         let submenu = try XCTUnwrap(menu.items.first { $0.title == "起動オプション" }?.submenu)
         XCTAssertEqual(submenu.items.first?.state, .off)
         XCTAssertEqual(submenu.items[1].state, .off)

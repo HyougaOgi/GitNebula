@@ -7,6 +7,7 @@ public sealed class AppSettings
     public static AppSettings Current { get; } = Load();
     public bool KeepRunning { get; set; } = true;
     public string GitExecutable { get; set; } = "";
+    public string SshKeyPath { get; set; } = "";
     public List<string> RecentRepositories { get; set; } = [];
     private static AppSettings Load()
     {

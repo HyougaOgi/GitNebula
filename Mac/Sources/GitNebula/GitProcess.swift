@@ -11,21 +11,22 @@ struct GitProcess {
         }
         return "/usr/bin/git"
     }
-    static func run(in path: String, arguments: [String], accepting statuses: Set<Int32> = [0]) throws -> Data {
+    static func run(in path: String, arguments: [String], accepting statuses: Set<Int32> = [0], ssh: SSHConfiguration = .current) throws -> Data {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
-        process.arguments = ["--no-pager", "-c", "color.ui=false", "-c", "core.quotepath=false", "-C", path] + arguments
         var environment = ProcessInfo.processInfo.environment
         environment["PATH"] = ["/opt/homebrew/bin", "/usr/local/bin", environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"].joined(separator: ":")
         environment["GIT_TERMINAL_PROMPT"] = "0"
         environment["GIT_EDITOR"] = "true"
         environment["GIT_SEQUENCE_EDITOR"] = "true"
-        process.environment = environment
         process.standardInput = FileHandle.nullDevice
         // Files avoid deadlocks and preserve binary output used for file comparisons.
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
+        let sshArguments = try ssh.configure(&environment, directory: directory)
+        process.arguments = ["--no-pager", "-c", "color.ui=false", "-c", "core.quotepath=false"] + sshArguments + ["-C", path] + arguments
+        process.environment = environment
         let output = directory.appendingPathComponent("stdout"), error = directory.appendingPathComponent("stderr")
         FileManager.default.createFile(atPath: output.path, contents: nil)
         FileManager.default.createFile(atPath: error.path, contents: nil)
@@ -38,7 +39,8 @@ struct GitProcess {
         let data = try Data(contentsOf: output)
         guard statuses.contains(process.terminationStatus) else {
             let details = String(decoding: data, as: UTF8.self) + String(decoding: try Data(contentsOf: error), as: UTF8.self)
-            throw GitRepository(path: path).failure("git \(arguments.first ?? "") が失敗しました（終了コード \(process.terminationStatus)）。\n\(details)")
+            let sshHint = details.contains("Permission denied (publickey)") || details.contains("Load key") || details.contains("Host key verification failed") ? "\n詳細設定の「SSH 認証」で秘密鍵とパスフレーズを確認してください。" : ""
+            throw GitRepository(path: path).failure("git \(arguments.first ?? "") が失敗しました（終了コード \(process.terminationStatus)）。\n\(details)\(sshHint)")
         }
         return data
     }

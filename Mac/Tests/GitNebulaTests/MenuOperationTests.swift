@@ -20,8 +20,11 @@ final class MenuOperationTests: XCTestCase {
         delegate.ensureWindow(); delegate.showHome(nil)
         let window = try XCTUnwrap(delegate.window)
         defer { window.delegate = nil; window.close() }
-        try await eventually { window.title == "ようこそ — GitNebula" }
-        XCTAssertFalse(descendants(try XCTUnwrap(window.contentView)).contains { $0 is FileTableView })
+        try await eventually { window.title == "GitNebula" }
+        try await eventually { self.descendants(window.contentView!).contains { ($0 as? RetainedScreenHost)?.subviews.count == 1 } }
+        let homeViews = descendants(try XCTUnwrap(window.contentView))
+        XCTAssertFalse(homeViews.contains { $0 is FileTableView || $0 is NSTextField && ($0 as? NSTextField)?.isEditable == true })
+        XCTAssertFalse(homeViews.compactMap { $0 as? NSButton }.contains { $0.title.contains("Clone") || $0.title.contains("リポジトリを選択") })
         let menu = delegate.makeFunctionMenu()
         for action in GitAction.allCases where action != .open {
             let item = try XCTUnwrap(menu.items.first { $0.representedObject as? String == action.rawValue })
@@ -41,7 +44,7 @@ final class MenuOperationTests: XCTestCase {
             try await eventually { !delegate.navigation.busy && delegate.navigation.current?.model?.action == .open }
         }
         XCTAssertFalse(delegate.applicationShouldHandleReopen(NSApp, hasVisibleWindows: true))
-        try await eventually { window.title == "ようこそ — GitNebula" }
+        try await eventually { window.title == "GitNebula" }
         XCTAssertFalse(descendants(try XCTUnwrap(window.contentView)).contains { $0 is FileTableView })
         XCTAssertEqual(try repo.readFile("file.txt"), "working\n", "Opening menus must never execute a Git operation")
     }

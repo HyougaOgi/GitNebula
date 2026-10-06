@@ -26,12 +26,8 @@ public partial class App : Application
         catch (Exception error) { MessageBox.Show(error.Message, "GitNebula", MessageBoxButton.OK, MessageBoxImage.Error); initialRequest = new("open", []); }
         var window = new MainWindow(initialRequest); MainWindow = window;
         var menu = new Forms.ContextMenuStrip();
-        menu.Items.Add("ようこそを表示", null, (_, _) => Dispatcher.Invoke(window.ShowHome));
-        menu.Items.Add(new Forms.ToolStripSeparator());
-        foreach (var (name, metadata) in LaunchRequest.Actions.Where(entry => entry.Key is not ("open" or "settings")))
-            menu.Items.Add(metadata.Title + "…", null, (_, _) => Dispatcher.InvokeAsync(() => window.ShowRequest(new LaunchRequest(name, []))));
-        menu.Items.Add(new Forms.ToolStripSeparator());
-        menu.Items.Add("設定…", null, (_, _) => Dispatcher.InvokeAsync(() => window.ShowRequest(new LaunchRequest("settings", []))));
+        menu.Items.Add("GitNebula を開く", null, (_, _) => Dispatcher.Invoke(window.ShowHome));
+        menu.Items.Add("詳細設定…", null, (_, _) => Dispatcher.InvokeAsync(() => window.ShowRequest(new LaunchRequest("settings", []))));
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("GitNebula を終了", null, (_, _) => Dispatcher.Invoke(Quit));
         tray = new Forms.NotifyIcon { Icon = System.Drawing.SystemIcons.Application, Text = "GitNebula", ContextMenuStrip = menu, Visible = true };

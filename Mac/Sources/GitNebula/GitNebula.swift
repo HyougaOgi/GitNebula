@@ -261,21 +261,23 @@ struct OperationScreen: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top) {
-                if navigation.canGoBack {
-                    Button(action: navigation.back) { Label("戻る", systemImage: "chevron.left") }
-                        .keyboardShortcut("[", modifiers: .command).accessibilityIdentifier("navigateBack")
+            if model.action != .open || page != nil {
+                HStack(alignment: .top) {
+                    if navigation.canGoBack {
+                        Button(action: navigation.back) { Label("戻る", systemImage: "chevron.left") }
+                            .keyboardShortcut("[", modifiers: .command).accessibilityIdentifier("navigateBack")
+                    }
+                    VStack(alignment: .leading, spacing: 5) {
+                        Label(title, systemImage: model.action.symbol).font(.title2.bold())
+                        Text(hint).font(.callout).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("アプリ画面", action: navigation.home)
+                    Label("GitNebula", systemImage: "sparkles").font(.caption.bold()).foregroundStyle(accent)
                 }
-                VStack(alignment: .leading, spacing: 5) {
-                    Label(title, systemImage: model.action.symbol).font(.title2.bold())
-                    Text(hint).font(.callout).foregroundStyle(.secondary)
-                }
-                Spacer()
-                if model.action != .open || page != nil { Button("ようこそ", action: navigation.home) }
-                Label("GitNebula", systemImage: "sparkles").font(.caption.bold()).foregroundStyle(accent)
             }
-            if page != .settings && model.action != .clone && (model.repository == nil || [.open, .initialize].contains(model.action)) { repositoryForm }
-            if let repo = model.repository, page != .settings, ![.clone, .initialize].contains(model.action) {
+            if page != .settings && ![.open, .clone].contains(model.action) && (model.repository == nil || model.action == .initialize) { repositoryForm }
+            if let repo = model.repository, page != .settings, ![.open, .clone, .initialize].contains(model.action) {
                 HStack {
                     Label(URL(fileURLWithPath: repo.path).lastPathComponent, systemImage: "folder")
                     Label(model.branch, systemImage: "arrow.triangle.branch").foregroundStyle(accent)
@@ -341,12 +343,17 @@ struct OperationScreen: View {
                 }
             }
             if [.clone, .initialize].contains(model.action) || page == .branches || page == .conflicts { Spacer(minLength: 0) }
-            Divider()
-            HStack(alignment: .top) {
-                if model.busy { ProgressView().controlSize(.small) }
-                else { Image(systemName: model.failed ? "exclamationmark.circle" : model.succeeded ? "checkmark.circle.fill" : "sparkle").foregroundStyle(model.failed ? .orange : accent) }
-                ScrollView { Text(model.status).font(.callout).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }.frame(maxHeight: model.failed ? 90 : 38)
-                Button("閉じる") { navigation.close() }.keyboardShortcut(.cancelAction)
+            if model.action != .open || page != nil {
+                Divider()
+                HStack(alignment: .top) {
+                    if model.busy { ProgressView().controlSize(.small) }
+                    else { Image(systemName: model.failed ? "exclamationmark.circle" : model.succeeded ? "checkmark.circle.fill" : "sparkle").foregroundStyle(model.failed ? .orange : accent) }
+                    ScrollView { Text(model.status).font(.callout).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }.frame(maxHeight: model.failed ? 90 : 38)
+                    if model.failed && (remoteAction || model.action == .clone) {
+                        Button("SSH の設定") { navigation.openUtility(.settings) }
+                    }
+                    Button("閉じる") { navigation.close() }.keyboardShortcut(.cancelAction)
+                }
             }
         }
         .padding(16).frame(minWidth: 1050, idealWidth: 1220, minHeight: 680)

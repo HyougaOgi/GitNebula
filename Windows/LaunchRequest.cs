@@ -5,7 +5,7 @@ public sealed record LaunchRequest(string Action, string[] Paths)
 {
     public static readonly Dictionary<string, (string Title, string Hint)> Actions = new()
     {
-        ["open"] = ("ようこそ", "リポジトリを開き、メニューから使いたい機能を選んでください。"),
+        ["open"] = ("GitNebula", "アプリの設定を管理します。"),
         ["commit"] = ("変更をコミット", "ファイルを確認して、メッセージを入力するだけ。"),
         ["diff"] = ("差分を確認", "ファイルを選ぶと変更内容が表示されます。"),
         ["log"] = ("履歴を表示", "コミット・ブランチ・タグの履歴を確認できます。"),
@@ -26,8 +26,15 @@ public sealed record LaunchRequest(string Action, string[] Paths)
         ["tags"] = ("タグを管理", "リリースなどの目印をコミットに付けます。"),
         ["remotes"] = ("リモートを設定", "送受信先の URL を登録、変更、削除します。"),
         ["identity"] = ("コミット作成者の設定", "このリポジトリで使う名前とメールアドレスを設定します。"),
-        ["settings"] = ("アプリの設定", "常駐と Git の実行ファイルを設定します。"),
+        ["settings"] = ("詳細設定", "SSH 認証、常駐、Git の実行ファイルを設定します。"),
     };
+    public static readonly (string Title, string[] Actions)[] MenuGroups = [
+        ("変更", ["diff", "commit", "stash", "files"]),
+        ("履歴", ["log", "cherry-pick", "revert"]),
+        ("ブランチ", ["switch", "merge", "rebase", "branches", "conflicts", "tags"]),
+        ("リモート", ["fetch", "pull", "push", "remotes"]),
+        ("リポジトリ", ["clone", "workspace", "identity"])
+    ];
     public static LaunchRequest Parse(string[] arguments)
     {
         var action = "open"; var paths = new List<string>();

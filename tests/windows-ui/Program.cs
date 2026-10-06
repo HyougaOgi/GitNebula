@@ -30,7 +30,8 @@ internal static class Program
                 }
                 await Wait();
                 Check(Find<ScrollViewer>("HomePanel").IsVisible && !Find<Border>("FilePanel").IsVisible, "normal startup displays home without diff");
-                Check(Find<StackPanel>("SettingsPanel").Visibility == Visibility.Collapsed, "startup displays one screen");
+                Check(Find<ScrollViewer>("SettingsPanel").Visibility == Visibility.Collapsed, "startup displays one screen");
+                Check(!Find<DockPanel>("PathPanel").IsVisible && !Find<ComboBox>("OtherActions").IsVisible && !Find<Button>("OpenButton").IsVisible, "app screen contains settings without repository work controls");
                 var firstCloneTarget = Path.Combine(root, "Clone 星 first"); Directory.CreateDirectory(firstCloneTarget);
                 var secondCloneTarget = Path.Combine(root, "Clone 星 second"); Directory.CreateDirectory(secondCloneTarget);
                 await window.ShowRequest(new LaunchRequest("clone", [firstCloneTarget])); await Wait();

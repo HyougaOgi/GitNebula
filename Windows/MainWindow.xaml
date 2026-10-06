@@ -25,21 +25,19 @@
           <DockPanel><TextBlock x:Name="SelectionCount" Foreground="#9CA8C7" VerticalAlignment="Center"/><Button x:Name="CommitButton" Content="コミット" Click="Commit_Click" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Right"/></DockPanel>
         </StackPanel>
         <ProgressBar x:Name="Progress" IsIndeterminate="True" Height="3" Margin="0,12,0,0"/>
-        <ScrollViewer MaxHeight="110" VerticalScrollBarVisibility="Auto" Margin="0,12"><TextBlock x:Name="Status" Text="準備完了" TextWrapping="Wrap" Foreground="#9CA8C7"/></ScrollViewer>
-        <DockPanel><Button DockPanel.Dock="Right" Content="ようこそ" Click="Home_Click"/><ComboBox x:Name="OtherActions" Width="240" HorizontalAlignment="Left" SelectionChanged="OtherAction_Changed"/><Button Content="閉じる" Click="Close_Click" HorizontalAlignment="Right" IsCancel="True"/></DockPanel>
+        <ScrollViewer x:Name="StatusPanel" MaxHeight="110" VerticalScrollBarVisibility="Auto" Margin="0,12"><TextBlock x:Name="Status" Text="準備完了" TextWrapping="Wrap" Foreground="#9CA8C7"/></ScrollViewer>
+        <DockPanel><Button DockPanel.Dock="Right" x:Name="HomeButton" Content="アプリ画面" Click="Home_Click"/><ComboBox x:Name="OtherActions" Width="240" HorizontalAlignment="Left" SelectionChanged="OtherAction_Changed"/><Button Content="閉じる" Click="Close_Click" HorizontalAlignment="Right" IsCancel="True"/></DockPanel>
       </StackPanel>
       <Grid>
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
         <ScrollViewer Grid.Row="1" x:Name="HomePanel" VerticalScrollBarVisibility="Auto">
           <StackPanel>
-            <TextBlock Text="GitNebula へようこそ" FontSize="32" FontWeight="Bold" Margin="4,10"/>
-            <TextBlock Text="作業するリポジトリを開き、下の「機能を選ぶ…」メニューまたはシステムトレイから操作を選んでください。" TextWrapping="Wrap" Foreground="#9CA8C7" Margin="4,12"/>
-            <WrapPanel><Button Content="リポジトリを選択…" Click="Open_Click"/><Button Content="リポジトリを複製（Clone）" Tag="clone" Click="Navigate_Click"/><Button Content="アプリの設定" Tag="settings" Click="Navigate_Click"/></WrapPanel>
-            <TextBlock Text="最近開いたリポジトリ" FontSize="18" Margin="4,16,4,8"/><StackPanel x:Name="RecentRepositories"/>
+            <TextBlock Text="GitNebula" FontSize="20" FontWeight="SemiBold" Margin="4,10"/>
+            <Button Content="詳細設定" FontSize="14" Tag="settings" Click="Navigate_Click" HorizontalAlignment="Left" Style="{StaticResource PrimaryButton}"/>
           </StackPanel>
         </ScrollViewer>
         <WrapPanel Grid.Row="1" x:Name="ManagementPanel" VerticalAlignment="Top">
-          <Button Content="作業ファイルを管理" Tag="files" Click="Navigate_Click"/><Button Content="ブランチを管理" Tag="branches" Click="Navigate_Click"/><Button Content="変更をマージ" Tag="merge" Click="Navigate_Click"/><Button Content="競合の解決" Tag="conflicts" Click="Navigate_Click"/><Button Content="コミット作成者の設定" Tag="identity" Click="Navigate_Click"/><Button Content="リモートを設定" Tag="remotes" Click="Navigate_Click"/>
+          <Button Content="作業ファイルを管理" Tag="files" Click="Navigate_Click"/><Button Content="ブランチを管理" Tag="branches" Click="Navigate_Click"/><Button Content="変更をマージ" Tag="merge" Click="Navigate_Click"/><Button Content="競合の解決" Tag="conflicts" Click="Navigate_Click"/><Button Content="リモートを設定" Tag="remotes" Click="Navigate_Click"/><Button Content="コミット作成者の設定" Tag="identity" Click="Navigate_Click"/>
         </WrapPanel>
         <StackPanel Grid.Row="1" x:Name="TaskPanel" VerticalAlignment="Top">
           <Border x:Name="RemotePanel" Style="{StaticResource Panel}"><StackPanel><TextBlock Text="リモート"/><ComboBox x:Name="RemoteChoice" Margin="0,10" SelectionChanged="Remote_Changed"/><TextBlock x:Name="RemoteTarget" TextWrapping="Wrap" Margin="0,8"/><TextBlock x:Name="RemoteNotice" Text="リモートが未設定です。「リモートを設定」から送受信先を登録してください。" TextWrapping="Wrap" Foreground="#FFBE90"/><Button Content="リモートを設定" Tag="remotes" Click="Navigate_Click" HorizontalAlignment="Left"/><Button x:Name="ExecuteButton" Click="Execute_Click" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Left"/></StackPanel></Border>
@@ -94,7 +92,18 @@
         <StackPanel Grid.Row="1" x:Name="TagsPanel"><TextBlock Text="ローカルのタグ"/><ListBox x:Name="TagList" Height="180" Background="#12182C" Foreground="#E9EAFA"/><WrapPanel><Button Content="タグを作成" Click="CreateTag_Click"/><Button Content="ローカルのタグを削除" Click="DeleteTag_Click"/><Button Content="タグを送信（Push）" Click="PushTag_Click"/></WrapPanel></StackPanel>
         <StackPanel Grid.Row="1" x:Name="RemoteSettingsPanel"><TextBlock Text="登録済みリモート"/><ListBox x:Name="RemoteList" Height="150" Background="#12182C" Foreground="#E9EAFA" SelectionChanged="RemoteSetting_Changed"/><TextBlock Text="リモート名"/><TextBox x:Name="RemoteName" Text="origin" Margin="0,8"/><TextBlock Text="URL またはローカルのパス"/><TextBox x:Name="RemoteUrl" Margin="0,8"/><WrapPanel><Button Content="登録 / URL を変更" Click="SaveRemote_Click"/><Button Content="登録を削除" Click="RemoveRemote_Click"/></WrapPanel></StackPanel>
         <StackPanel Grid.Row="1" x:Name="IdentityPanel"><TextBlock Text="名前"/><TextBox x:Name="IdentityName" Margin="0,8"/><TextBlock Text="メールアドレス"/><TextBox x:Name="IdentityEmail" Margin="0,8"/><Button Content="作成者を保存" Click="SaveIdentity_Click" HorizontalAlignment="Left"/></StackPanel>
-        <StackPanel Grid.Row="1" x:Name="SettingsPanel"><CheckBox x:Name="KeepRunning" Content="閉じてもシステムトレイに常駐する" Foreground="#E9EAFA"/><TextBlock Text="トレイアイコンをクリックするとホームを表示します。メニューから明示的に終了できます。" TextWrapping="Wrap" Margin="0,12"/><TextBlock Text="Git の実行ファイル（空欄なら自動検出）"/><TextBox x:Name="GitExecutable" Margin="0,8"/><TextBlock x:Name="GitDetected" TextWrapping="Wrap"/><Button Content="設定を保存" Click="SaveSettings_Click" HorizontalAlignment="Left"/><Button Content="GitNebula を終了" Click="Quit_Click" HorizontalAlignment="Left"/></StackPanel>
+        <ScrollViewer Grid.Row="1" x:Name="SettingsPanel" VerticalScrollBarVisibility="Auto"><StackPanel>
+          <CheckBox x:Name="KeepRunning" Content="閉じてもシステムトレイに常駐する" Foreground="#E9EAFA"/>
+          <TextBlock Text="トレイアイコンをクリックするとアプリ画面を表示します。" TextWrapping="Wrap" Margin="0,12"/>
+          <TextBlock Text="Git の実行ファイル（空欄なら自動検出）"/><TextBox x:Name="GitExecutable" Margin="0,8"/><TextBlock x:Name="GitDetected" TextWrapping="Wrap"/>
+          <TextBlock Text="SSH 認証" FontSize="18" FontWeight="Bold" Margin="0,20,0,8"/>
+          <TextBlock Text="秘密鍵（空欄なら既存の SSH 設定を使用）"/>
+          <DockPanel Margin="0,8"><Button Content="選択…" DockPanel.Dock="Right" Click="ChooseSshKey_Click"/><TextBox x:Name="SshKeyPath" AutomationProperties.Name="SSH 秘密鍵"/></DockPanel>
+          <TextBlock Text="鍵のパスフレーズ"/><PasswordBox x:Name="SshPassphrase" Margin="0,8" Padding="8" AutomationProperties.Name="鍵のパスフレーズ"/>
+          <TextBlock Text="空欄なら保存済みの値を使用します。パスフレーズは Windows 資格情報マネージャーに保存し、Clone・Fetch・Pull・Push で自動使用します。" TextWrapping="Wrap" Foreground="#9CA8C7"/>
+          <WrapPanel Margin="0,12"><Button Content="設定を保存" Click="SaveSettings_Click"/><Button Content="保存したパスフレーズを削除" Click="ForgetSshPassphrase_Click"/></WrapPanel>
+          <Button Content="GitNebula を終了" Click="Quit_Click" HorizontalAlignment="Left"/>
+        </StackPanel></ScrollViewer>
       </Grid>
     </DockPanel>
   </Grid>

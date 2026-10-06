@@ -77,3 +77,10 @@ Pull は fast-forward のみ。追跡設定のあるリモートを初期選択�
 リポジトリ内のテキストをマークアップとして解釈しない。
 
 実装参照: [Finder Sync](https://developer.apple.com/library/archive/documentation/General/Conceptual/ExtensibilityPG/Finder.html)、[Explorer cascading menus](https://learn.microsoft.com/en-us/windows/win32/shell/creating-cascading-menu-handlers)、[Nautilus MenuProvider](https://gnome.pages.gitlab.gnome.org/nautilus-python/class-nautilus-python-menu-provider.html)。
+
+
+## アプリ画面と SSH 認証
+
+アプリ画面には GitNebula と詳細設定への入口だけを表示する。Git の作業は対象フォルダの右クリックから専用画面を開く。メニュー順は変更、履歴、ブランチ、リモート、リポジトリで統一する。
+
+選択した秘密鍵のパスは通常設定、パスフレーズは OS の保護された保存領域に分ける。macOS は Security の generic password、Windows は Win32 Credential Manager を使う。GitProcess は SSH の鍵選択と ASKPASS 環境を組み立て、アプリ自身をヘルパーとして起動する。パスフレーズは選択した鍵の完全なパスに一致する解除要求にだけ標準出力で返す。ホスト鍵の確認では接続先とフィンガープリントを表示し、保存した鍵のパスフレーズをサーバーのパスワードとして送らない。

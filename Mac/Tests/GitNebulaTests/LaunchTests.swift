@@ -78,6 +78,7 @@ final class LaunchTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         _ = try GitRepository.initialize(root.path)
         let model = Workspace()
+        model.selectAction(.diff)
         model.repositoryPath = root.appendingPathComponent("missing").path
         model.openEnteredPath()
         while model.busy { try await Task.sleep(nanoseconds: 20_000_000) }

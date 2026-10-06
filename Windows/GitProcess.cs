@@ -40,7 +40,9 @@ public static class GitProcess
         info.Environment["GIT_TERMINAL_PROMPT"] = "0";
         info.Environment["GIT_EDITOR"] = "true";
         info.Environment["GIT_SEQUENCE_EDITOR"] = "true";
-        foreach (var arg in new[] { "--no-pager", "-c", "color.ui=false", "-c", "core.quotepath=false", "-C", path }.Concat(arguments)) info.ArgumentList.Add(arg);
+        using var ssh = new SSHConfiguration();
+        var sshArguments = ssh.Configure(info, AppSettings.Current.SshKeyPath);
+        foreach (var arg in new[] { "--no-pager", "-c", "color.ui=false", "-c", "core.quotepath=false" }.Concat(sshArguments).Concat(new[] { "-C", path }).Concat(arguments)) info.ArgumentList.Add(arg);
         using var process = new Process { StartInfo = info };
         try { process.Start(); }
         catch (Win32Exception error) { throw new InvalidOperationException($"Git を起動できません（{Executable}）。設定で Git の実行ファイルを確認してください。\n{error.Message}", error); }
@@ -49,7 +51,10 @@ public static class GitProcess
         var errorOutput = process.StandardError.ReadToEndAsync();
         await process.WaitForExitAsync();
         var stdout = await output; var stderr = await errorOutput;
-        if (!accepting.Contains(process.ExitCode)) throw new InvalidOperationException($"git {arguments.FirstOrDefault()} が失敗しました（終了コード {process.ExitCode}）。\n{stdout}{stderr}");
+        if (!accepting.Contains(process.ExitCode)) {
+            var hint = stderr.Contains("Permission denied (publickey)") || stderr.Contains("Load key") || stderr.Contains("Host key verification failed") ? "\n詳細設定の「SSH 認証」で秘密鍵とパスフレーズを確認してください。" : "";
+            throw new InvalidOperationException($"git {arguments.FirstOrDefault()} が失敗しました（終了コード {process.ExitCode}）。\n{stdout}{stderr}{hint}");
+        }
         return stdout;
     }
 }

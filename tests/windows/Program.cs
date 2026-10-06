@@ -3,8 +3,34 @@ using GitNebula;
 static void Check(bool condition, string message) { if (!condition) throw new Exception(message); }
 var temporary = Path.Combine(Path.GetTempPath(), "gitnebula-tests-" + Guid.NewGuid());
 Directory.CreateDirectory(temporary);
+Environment.SetEnvironmentVariable("GITNEBULA_SETTINGS_PATH", Path.Combine(temporary, "settings.json"));
 try
 {
+    var orderedActions = LaunchRequest.MenuGroups.SelectMany(group => group.Actions).ToArray();
+    Check(LaunchRequest.MenuGroups.Select(group => group.Title).SequenceEqual(new[] { "変更", "履歴", "ブランチ", "リモート", "リポジトリ" }), "menu group order");
+    Check(orderedActions.Distinct().Count() == orderedActions.Length && orderedActions.ToHashSet().SetEquals(LaunchRequest.Actions.Keys.Except(new[] { "open", "settings" })), "menu includes each Git action exactly once");
+    var key = Path.Combine(temporary, "id ' 星 & key");
+    var info = new System.Diagnostics.ProcessStartInfo(); info.Environment["GIT_SSH_COMMAND"] = "existing SSH";
+    using (var ssh = new SSHConfiguration()) {
+        Check(ssh.Configure(info, "").Length == 0 && info.Environment["GIT_SSH_COMMAND"] == "existing SSH", "empty key preserves SSH configuration");
+        var sshArguments = ssh.Configure(info, key, Path.Combine(temporary, "app with spaces", "GitNebula.exe"));
+        Check(!info.Environment.ContainsKey("GIT_SSH_COMMAND") && info.Environment["GITNEBULA_SSH_KEY"] == key.Replace('\\', '/'), "selected key overrides inherited SSH commands without interpolation");
+        Check(info.Environment["SSH_ASKPASS_REQUIRE"] == "force" && !sshArguments[1].Contains(key), "askpass enabled without key or secret in command text");
+        var wrapper = info.Environment["GIT_SSH"]!;
+        Check(File.Exists(wrapper) && File.ReadAllText(wrapper).Contains("\"$GITNEBULA_SSH_KEY\""), "key passed as one quoted argument");
+    }
+    Check(SSHConfiguration.IsKeyPassphrasePrompt("Enter passphrase for key '" + key.Replace('\\', '/') + "': ", key), "selected key prompt accepted");
+    foreach (var prompt in new[] { "git@example.invalid's password: ", "Are you sure you want to continue connecting?", "Enter passphrase for key '/other/key': ", "Enter passphrase for key '" + key.Replace('\\', '/') + "-other': " })
+        Check(!SSHConfiguration.IsKeyPassphrasePrompt(prompt, key), "passphrase not sent to unrelated authentication prompt");
+    AppSettings.Current.SshKeyPath = key; AppSettings.Current.Save();
+    Check(File.ReadAllText(Path.Combine(temporary, "settings.json")).Contains("SshKeyPath") && !typeof(AppSettings).GetProperties().Any(property => property.Name.Contains("Passphrase")), "settings persist key path without passphrase");
+    AppSettings.Current.SshKeyPath = "";
+    if (OperatingSystem.IsWindows()) {
+        try { SSHCredentialStore.Save(key, "test-only passphrase"); Check(SSHCredentialStore.Read(key) == "test-only passphrase", "credential manager round trip"); }
+        finally { SSHCredentialStore.Remove(key); }
+        Check(SSHCredentialStore.Read(key) == null, "saved passphrase deletion");
+    }
+    Console.WriteLine("PASS: SSH environment, selected-key prompt guard, protected-storage interface and menu grouping");
     var root = Path.Combine(temporary, "repo with spaces"); Directory.CreateDirectory(root);
     var repo = new GitRepository(root);
     await repo.Run("init", "-q"); await repo.Run("config", "user.name", "Test"); await repo.Run("config", "user.email", "test@example.invalid");

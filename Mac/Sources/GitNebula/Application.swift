@@ -4,6 +4,7 @@ import SwiftUI
 @main
 struct GitNebulaApp {
     @MainActor static func main() {
+        if let status = SSHAskPass.runIfRequested() { exit(status) }
         let app = NSApplication.shared
         let delegate = ApplicationDelegate()
         app.delegate = delegate
@@ -34,8 +35,8 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let menu = NSMenu()
         let appItem = NSMenuItem(); appItem.title = "GitNebula"; menu.addItem(appItem)
         let appMenu = NSMenu(title: "GitNebula"); appItem.submenu = appMenu
-        appMenu.addItem(withTitle: "ようこそを表示", action: #selector(showHome(_:)), keyEquivalent: "0").target = self
-        appMenu.addItem(withTitle: "設定…", action: #selector(showSettings(_:)), keyEquivalent: ",").target = self
+        appMenu.addItem(withTitle: "GitNebula を開く", action: #selector(showHome(_:)), keyEquivalent: "0").target = self
+        appMenu.addItem(withTitle: "詳細設定…", action: #selector(showSettings(_:)), keyEquivalent: ",").target = self
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "GitNebula を終了", action: #selector(quit(_:)), keyEquivalent: "q").target = self
         let operations = NSMenuItem(title: "Git 操作", action: nil, keyEquivalent: "")
@@ -69,7 +70,7 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     func ensureWindow() {
         guard window == nil else { return }
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1220, height: 820), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.title = "ようこそ — GitNebula"; window.appearance = NSAppearance(named: .darkAqua)
+        window.title = "GitNebula"; window.appearance = NSAppearance(named: .darkAqua)
         window.isReleasedWhenClosed = false; window.delegate = self
         window.contentView = NSHostingView(rootView: ContentView(model: model, closeWindow: { [weak window] in window?.performClose(nil) }, navigation: navigation))
         window.center(); self.window = window
@@ -100,20 +101,31 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     }
     func makeFunctionMenu() -> NSMenu {
         let menu = NSMenu(title: "Git 操作")
-        menu.addItem(withTitle: "ようこそを表示", action: #selector(showHome(_:)), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "GitNebula を開く", action: #selector(showHome(_:)), keyEquivalent: "").target = self
         menu.addItem(.separator())
-        for action in GitAction.allCases where action != .open {
-            if [.clone, .cherryPick, .tools].contains(action) { menu.addItem(.separator()) }
-            let item = menu.addItem(withTitle: action.title + "…", action: #selector(openFunction(_:)), keyEquivalent: "")
-            item.target = self; item.representedObject = action.rawValue
-            item.image = NSImage(systemSymbolName: action.symbol, accessibilityDescription: nil)
+        for (index, group) in GitAction.menuGroups.enumerated() {
+            if index > 0 { menu.addItem(.separator()) }
+            func addAction(_ action: GitAction) {
+                let item = menu.addItem(withTitle: action.title + "…", action: #selector(openFunction(_:)), keyEquivalent: "")
+                item.target = self; item.representedObject = action.rawValue
+                item.image = NSImage(systemSymbolName: action.symbol, accessibilityDescription: nil)
+            }
+            for action in group.actions where action != .tags { addAction(action) }
+            let pages: [(String, UtilityPage)]
+            switch group.title {
+            case "変更": pages = [("files", .files)]
+            case "ブランチ": pages = [("branches", .branches), ("conflicts", .conflicts)]
+            case "リポジトリ": pages = [("identity", .identity)]
+            default: pages = []
+            }
+            for (name, page) in pages {
+                let item = menu.addItem(withTitle: page.title + "…", action: #selector(openManagement(_:)), keyEquivalent: "")
+                item.target = self; item.representedObject = name
+            }
+            if group.actions.contains(.tags) { addAction(.tags) }
         }
         menu.addItem(.separator())
-        for (name, page) in [("files", UtilityPage.files), ("branches", .branches), ("conflicts", .conflicts), ("identity", .identity)] {
-            let item = menu.addItem(withTitle: page.title + "…", action: #selector(openManagement(_:)), keyEquivalent: "")
-            item.target = self; item.representedObject = name
-        }
-        menu.addItem(withTitle: "設定…", action: #selector(showSettings(_:)), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "詳細設定…", action: #selector(showSettings(_:)), keyEquivalent: "").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "GitNebula を終了", action: #selector(quit(_:)), keyEquivalent: "").target = self
         return menu
@@ -121,13 +133,13 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     func makeResidentMenu() -> NSMenu {
         startupOptions.refresh()
         let menu = NSMenu(title: "GitNebula")
-        menu.addItem(withTitle: "ようこそを開く", action: #selector(showHome(_:)), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "GitNebula を開く", action: #selector(showHome(_:)), keyEquivalent: "").target = self
         menu.addItem(withTitle: "詳細設定…", action: #selector(showSettings(_:)), keyEquivalent: "").target = self
         let options = NSMenuItem(title: "起動オプション", action: nil, keyEquivalent: "")
         let submenu = NSMenu(title: "起動オプション")
         let login = submenu.addItem(withTitle: "ログイン時に自動起動", action: #selector(toggleLaunchAtLogin(_:)), keyEquivalent: "")
         login.target = self; login.state = startupOptions.launchAtLogin ? .on : .off
-        let welcome = submenu.addItem(withTitle: "起動時にようこそ画面を開く", action: #selector(toggleWelcomeOnLaunch(_:)), keyEquivalent: "")
+        let welcome = submenu.addItem(withTitle: "起動時にアプリ画面を開く", action: #selector(toggleWelcomeOnLaunch(_:)), keyEquivalent: "")
         welcome.target = self; welcome.state = startupOptions.showWelcomeOnLaunch ? .on : .off
         submenu.addItem(.separator())
         submenu.addItem(withTitle: "ログイン項目の設定を開く…", action: #selector(openLoginSettings(_:)), keyEquivalent: "").target = self

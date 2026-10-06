@@ -22,7 +22,7 @@ enum UtilityPage: Equatable {
     }
     var hint: String {
         switch self {
-        case .settings: return "常駐と Git の実行ファイルを設定します。"
+        case .settings: return "SSH 認証、常駐と Git の実行ファイルを設定します。"
         case .files: return "ステージ・ステージ解除・無視・変更の破棄を行います。"
         case .branches: return "ブランチの作成・名前変更・削除・マージを行います。"
         case .conflicts: return "競合ファイルを解決し、進行中の操作を再開または中止します。"
@@ -186,7 +186,7 @@ final class RetainedScreenHost: NSView {
         if !screenTitle.isEmpty { window?.title = screenTitle }
     }
     func display(_ frame: ScreenNavigation.Frame) {
-        screenTitle = frame.title + " — GitNebula"
+        screenTitle = frame.title == "GitNebula" ? "GitNebula" : frame.title + " — GitNebula"
         window?.title = screenTitle
         guard active !== frame.host else { return }
         // Remove every stale child; only one route may be attached to the window.

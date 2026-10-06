@@ -7,6 +7,16 @@ import FinderSync
 final class FinderMenuTests: XCTestCase {
     @objc private func launch(_ sender: NSMenuItem) {}
 
+    func testMenuGroupsContainEveryActionOnceAndMatchApplicationMenu() throws {
+        XCTAssertEqual(GitAction.menuGroups.map(\.title), ["変更", "履歴", "ブランチ", "リモート", "リポジトリ"])
+        XCTAssertEqual(Set(GitAction.menuActions), Set(GitAction.allCases.filter { $0 != .open }))
+        XCTAssertEqual(Set(GitAction.menuActions).count, GitAction.menuActions.count)
+        let finder = try XCTUnwrap(FinderMenu().makeMenu(paths: ["/repo"], target: self, selector: #selector(launch(_:)))?.items.first?.submenu)
+        XCTAssertEqual(finder.items.filter(\.isSeparatorItem).count, 4)
+        let application = ApplicationDelegate().makeFunctionMenu()
+        XCTAssertEqual(application.items.compactMap { ($0.representedObject as? String).flatMap(GitAction.init(rawValue:)) }, GitAction.menuActions)
+    }
+
     private func items(_ menu: FinderMenu, paths: [String], cloneParent: String? = nil, cloneIntoSelection: String? = nil) throws -> [NSMenuItem] {
         let root = try XCTUnwrap(menu.makeMenu(paths: paths, cloneParent: cloneParent, cloneIntoSelection: cloneIntoSelection, target: self, selector: #selector(launch(_:))))
         return try XCTUnwrap(root.items.first?.submenu).items.filter { !$0.isSeparatorItem }
@@ -23,7 +33,7 @@ final class FinderMenuTests: XCTestCase {
         let menu = FinderMenu()
         let paths = ["/repo/星雲 #?&%.txt", "/repo/space folder"]
         let items = try items(menu, paths: paths)
-        let actions = GitAction.allCases.filter { $0 != .open }
+        let actions = GitAction.menuActions
         XCTAssertEqual(items.count, actions.count)
         XCTAssertEqual(Set(items.map(\.tag)).count, actions.count)
         for (item, action) in zip(items, actions) {

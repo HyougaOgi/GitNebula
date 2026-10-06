@@ -49,14 +49,16 @@ final class FinderMenu {
             nextTag += 1
             actions.addItem(item)
         }
-        for action in GitAction.allCases where action != .open {
-            if action == .clone || action == .workspace { actions.addItem(.separator()) }
-            if action == .clone, let cloneParent {
-                add(action, title: Self.cloneHereTitle, paths: [cloneParent])
-                if let cloneIntoSelection, cloneIntoSelection != cloneParent {
-                    add(action, title: Self.cloneInSelectionTitle, paths: [cloneIntoSelection])
-                }
-            } else { add(action, title: action.title + "…", paths: paths) }
+        for (index, group) in GitAction.menuGroups.enumerated() {
+            if index > 0 { actions.addItem(.separator()) }
+            for action in group.actions {
+                if action == .clone, let cloneParent {
+                    add(action, title: Self.cloneHereTitle, paths: [cloneParent])
+                    if let cloneIntoSelection, cloneIntoSelection != cloneParent {
+                        add(action, title: Self.cloneInSelectionTitle, paths: [cloneIntoSelection])
+                    }
+                } else { add(action, title: action.title + "…", paths: paths) }
+            }
         }
         // Keep recent menus separate so a later menu cannot change the paths
         // associated with an earlier click. Bound storage in this long-lived process.

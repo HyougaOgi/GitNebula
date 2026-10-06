@@ -4,9 +4,18 @@ enum GitAction: String, CaseIterable, Sendable {
     case open, commit, diff, log, pull, push, fetch, switchBranch = "switch", clone, initialize = "init", stash, tags, remotes
     case cherryPick = "cherry-pick", revert, rebase, merge, tools, workspace
 
+    static let menuGroups: [(title: String, actions: [GitAction])] = [
+        ("変更", [.diff, .commit, .stash]),
+        ("履歴", [.log, .cherryPick, .revert]),
+        ("ブランチ", [.switchBranch, .merge, .rebase, .tags]),
+        ("リモート", [.fetch, .pull, .push, .remotes]),
+        ("リポジトリ", [.clone, .initialize, .workspace, .tools])
+    ]
+    static var menuActions: [GitAction] { menuGroups.flatMap(\.actions) }
+
     var title: String {
         switch self {
-        case .open: return "ようこそ"
+        case .open: return "GitNebula"
         case .commit: return "変更をコミット"
         case .diff: return "差分一覧"
         case .log: return "履歴を表示"
@@ -29,7 +38,7 @@ enum GitAction: String, CaseIterable, Sendable {
     }
     var hint: String {
         switch self {
-        case .open: return "リポジトリを開き、メニューバーから操作を選んでください。"
+        case .open: return "アプリの設定と起動オプションを管理します。"
         case .commit: return "ファイルを確認して、メッセージを入力するだけ。"
         case .diff: return "変更ファイルの一覧です。ファイルを開くと、その差分を表示します。"
         case .log: return "コミットの一覧・説明・変更ファイルを表示します。"

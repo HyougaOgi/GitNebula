@@ -16,7 +16,7 @@ struct FunctionLauncher: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 if management {
-                    ForEach([UtilityPage.files, .branches, .conflicts, .identity], id: \.title) { page in
+                    ForEach([UtilityPage.files, .branches, .conflicts], id: \.title) { page in
                         Button { navigation.openUtility(page) } label: {
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(page.title).font(.headline)
@@ -25,6 +25,7 @@ struct FunctionLauncher: View {
                         }.buttonStyle(.bordered)
                     }
                     Button("リモートを設定") { navigation.openAction(.remotes) }
+                    Button(UtilityPage.identity.title) { navigation.openUtility(.identity) }
                 } else {
                     ForEach(groups, id: \.0) { title, tools in
                         Text(title).font(.headline)

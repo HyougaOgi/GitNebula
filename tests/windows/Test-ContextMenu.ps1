@@ -1,6 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $installer = Join-Path $PSScriptRoot '../../Windows/Install-ContextMenu.ps1'
 $exe = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../Windows/bin/Debug/net8.0-windows/GitNebula.exe'))
+$expected = @('diff', 'commit', 'stash', 'files', 'log', 'cherry-pick', 'revert', 'switch', 'merge', 'rebase', 'branches', 'conflicts', 'tags', 'fetch', 'pull', 'push', 'remotes', 'clone', 'workspace', 'identity')
 $roots = @('HKCU:\Software\Classes\Directory\shell\GitNebula', 'HKCU:\Software\Classes\Directory\Background\shell\GitNebula', 'HKCU:\Software\Classes\*\shell\GitNebula')
 foreach ($root in $roots) { if (Test-Path -LiteralPath $root) { throw 'Run this integration test in a clean user profile; an existing GitNebula installation was found.' } }
 try {
@@ -12,10 +13,15 @@ try {
     foreach ($root in $roots) {
         if (Test-Path -LiteralPath ($root + '\command')) { throw 'Old single action survived upgrade.' }
         $verbs = @(Get-ChildItem -LiteralPath ($root + '\shell'))
-        if ($verbs.Count -ne 9) { throw 'Missing action menu.' }
-        foreach ($verb in $verbs) {
+        if ($verbs.Count -ne $expected.Count) { throw 'Missing action menu.' }
+        $index = 0
+        foreach ($verb in ($verbs | Sort-Object PSChildName)) {
             $command = (Get-Item -LiteralPath ($verb.PSPath + '\command')).GetValue('')
-            if ($command -notmatch ' --action (commit|diff|log|pull|push|fetch|switch|clone|workspace) --path ') { throw "Invalid action: $command" }
+            if ($command -notmatch (' --action ' + [regex]::Escape($expected[$index]) + ' --path ')) { throw "Invalid action order: $command" }
+            $separator = (Get-Item -LiteralPath $verb.PSPath).GetValue('CommandFlags', 0)
+            $end = @('files', 'revert', 'tags', 'remotes') -contains $expected[$index]
+            if (($separator -eq 0x40) -ne $end) { throw 'Missing menu grouping.' }
+            $index++
         }
     }
 } finally { & $installer -Executable $exe -Uninstall }

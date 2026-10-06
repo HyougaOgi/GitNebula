@@ -24,11 +24,15 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         OtherActions.Items.Add(new ComboBoxItem { Content = "機能を選ぶ…", Tag = "placeholder" });
-        foreach (var (name, metadata) in LaunchRequest.Actions.OrderBy(entry => entry.Key == "settings" ? 0 : entry.Key == "clone" ? 1 : 2))
+        foreach (var group in LaunchRequest.MenuGroups)
         {
-            OtherActions.Items.Add(new ComboBoxItem { Content = metadata.Title, Tag = name });
+            OtherActions.Items.Add(new ComboBoxItem { Content = group.Title, Tag = "placeholder", IsEnabled = false });
+            foreach (var name in group.Actions)
+                OtherActions.Items.Add(new ComboBoxItem { Content = LaunchRequest.Actions[name].Title, Tag = name });
         }
-        initialized = true; OtherActions.SelectedIndex = 0; RenderRecent(); SetAction("open");
+        OtherActions.Items.Add(new ComboBoxItem { Content = "アプリ", Tag = "placeholder", IsEnabled = false });
+        foreach (var name in new[] { "open", "settings" }) OtherActions.Items.Add(new ComboBoxItem { Content = LaunchRequest.Actions[name].Title, Tag = name });
+        initialized = true; OtherActions.SelectedIndex = 0; SetAction("open");
         Closing += (_, e) => {
             if (Application.Current is App exiting && exiting.IsExiting) return;
             if (AppSettings.Current.KeepRunning && Application.Current is App app && app.ResidentEnabled) { e.Cancel = true; Hide(); }
@@ -47,7 +51,7 @@ public partial class MainWindow : Window
     {
         action = name;
         Heading.Text = LaunchRequest.Actions[name].Title; Hint.Text = LaunchRequest.Actions[name].Hint;
-        Title = Heading.Text + " — GitNebula";
+        Title = name == "open" ? "GitNebula" : Heading.Text + " — GitNebula";
         Width = 1050;
         Height = 820;
         if (name == "clone" && string.IsNullOrEmpty(CloneParent.Text))
@@ -58,6 +62,7 @@ public partial class MainWindow : Window
         if (name == "settings") {
             KeepRunning.IsChecked = AppSettings.Current.KeepRunning; GitExecutable.Text = AppSettings.Current.GitExecutable;
             GitDetected.Text = "使用する Git: " + GitProcess.Executable;
+            SshKeyPath.Text = AppSettings.Current.SshKeyPath; SshPassphrase.Clear();
         }
         if (!busy && repository != null && name is not ("open" or "settings" or "clone")) _ = Act(Refresh);
     }
@@ -67,6 +72,7 @@ public partial class MainWindow : Window
         var ready = repository != null && !busy;
         var hasConflicts = sequence != null || ConflictChoice.Items.Count > 0;
         HomePanel.Visibility = Show(action == "open");
+        Heading.Visibility = Hint.Visibility = StatusPanel.Visibility = HomeButton.Visibility = Show(action != "open");
         ManagementPanel.Visibility = Show(action == "workspace" && repository != null);
         StashPanel.Visibility = Show(action == "stash" && repository != null);
         TagsPanel.Visibility = Show(action == "tags" && repository != null);
@@ -113,8 +119,9 @@ public partial class MainWindow : Window
         DropStashButton.IsEnabled = ready && stash != null && !hasConflicts;
         StashNotice.Text = !hasHead ? "Stash を使う前に最初のコミットを作成してください。" : hasConflicts ? "競合を解決してから Stash を使ってください。" : allChanges.Count > 0 ? "現在の変更を退避できます。適用・取り出しの前に、変更をコミットまたは退避してください。" : "退避データを選ぶと、内容を確認して作業を再開できます。";
         Progress.Visibility = Show(busy);
-        OpenButton.Visibility = RefreshButton.Visibility = Location.Visibility = Show(action is not ("clone" or "settings"));
-        PathPanel.Visibility = Show(action is not ("clone" or "settings"));
+        OpenButton.Visibility = RefreshButton.Visibility = Location.Visibility = Show(action is not ("open" or "clone" or "settings"));
+        PathPanel.Visibility = Show(action is not ("open" or "clone" or "settings"));
+        OtherActions.Visibility = Show(action is not ("open" or "settings"));
         RefreshButton.IsEnabled = ready;
         CommitButton.IsEnabled = ready && selected.Count > 0 && !string.IsNullOrWhiteSpace(Message.Text) && !hasConflicts;
         SelectionCount.Text = $"{selected.Count} ファイルを選択";
@@ -216,7 +223,7 @@ public partial class MainWindow : Window
         }
         var changes = await candidate.Changes(); var branch = await candidate.Branch();
         repository = candidate; Render(changes, branch); await RefreshDetails();
-        AppSettings.Current.Remember(candidate.Path); RenderRecent();
+        AppSettings.Current.Remember(candidate.Path);
         if (visibleChanges.Count > 0 && action is "commit" or "diff" or "files") DiffView.Text = await repository.Diff(visibleChanges[0].Path);
     }
     private async Task Refresh()

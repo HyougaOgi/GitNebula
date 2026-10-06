@@ -31,14 +31,6 @@ public partial class MainWindow
     }
     private void Home_Click(object sender, RoutedEventArgs e) => ShowHome();
     private void Navigate_Click(object sender, RoutedEventArgs e) => SetAction((string)((Button)sender).Tag);
-    private void RenderRecent()
-    {
-        RecentRepositories.Children.Clear();
-        foreach (var path in AppSettings.Current.RecentRepositories) {
-            var button = new Button { Content = "最近開いたリポジトリ: " + path, HorizontalContentAlignment = HorizontalAlignment.Left };
-            button.Click += async (_, _) => await OpenManualPath(path); RecentRepositories.Children.Add(button);
-        }
-    }
     private async Task RefreshActionData()
     {
         if (repository == null) return;
@@ -145,9 +137,24 @@ public partial class MainWindow
     }
     private async void SaveSettings_Click(object sender, RoutedEventArgs e) => await Act(() => {
         var settings = AppSettings.Current;
-        settings.KeepRunning = KeepRunning.IsChecked == true; settings.GitExecutable = GitExecutable.Text.Trim(); settings.Save();
+        var key = string.IsNullOrWhiteSpace(SshKeyPath.Text) ? "" : LaunchRequest.InputPath(SshKeyPath.Text);
+        if (key.Length > 0) {
+            if (!System.IO.File.Exists(key) || key.EndsWith(".pub", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("読み込み可能な秘密鍵を選択してください。公開鍵（.pub）は使用できません。");
+            using (System.IO.File.OpenRead(key)) { }
+            if (SshPassphrase.Password.Length > 0) SSHCredentialStore.Save(key, SshPassphrase.Password);
+        } else if (SshPassphrase.Password.Length > 0) throw new ArgumentException("パスフレーズを保存する秘密鍵を選択してください。");
+        settings.KeepRunning = KeepRunning.IsChecked == true; settings.GitExecutable = GitExecutable.Text.Trim(); settings.SshKeyPath = key; settings.Save();
+        SshKeyPath.Text = key; SshPassphrase.Clear();
         GitDetected.Text = "使用する Git: " + GitProcess.Executable;
         return Task.CompletedTask;
     }, "アプリの設定を保存しました。");
+    private void ChooseSshKey_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog { Title = "SSH 秘密鍵を選択", InitialDirectory = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ssh") };
+        if (dialog.ShowDialog(this) == true) SshKeyPath.Text = dialog.FileName;
+    }
+    private async void ForgetSshPassphrase_Click(object sender, RoutedEventArgs e) => await Act(() => {
+        SSHCredentialStore.Remove(LaunchRequest.InputPath(SshKeyPath.Text)); SshPassphrase.Clear(); return Task.CompletedTask;
+    }, "保存したパスフレーズを削除しました。");
     private void Quit_Click(object sender, RoutedEventArgs e) { if (Application.Current is App app) app.Quit(); }
 }

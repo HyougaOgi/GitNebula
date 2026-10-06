@@ -10,16 +10,28 @@ $entries = @{
     'HKCU:\Software\Classes\*\shell\GitNebula' = '%1'
 }
 $actions = [ordered]@{
-    'commit' = '変更をコミット…'
     'diff' = '差分を確認…'
+    'commit' = '変更をコミット…'
+    'stash' = '変更を一時退避する（Stash）…'
+    'files' = '作業ファイルの管理…'
     'log' = '履歴を表示…'
+    'cherry-pick' = 'コミットを取り込む（Cherry-pick）…'
+    'revert' = 'コミットを取り消す（Revert）…'
+    'switch' = 'ブランチを切り替え…'
+    'merge' = 'ブランチの変更を取り込む（Merge）…'
+    'rebase' = 'ブランチの起点を移す（Rebase）…'
+    'branches' = 'ブランチの管理…'
+    'conflicts' = '競合の解決…'
+    'tags' = 'タグを管理…'
+    'fetch' = 'リモートを更新（Fetch）…'
     'pull' = '変更を受信（Pull）…'
     'push' = '変更を送信（Push）…'
-    'fetch' = 'リモートを更新（Fetch）…'
-    'switch' = 'ブランチを切り替え…'
+    'remotes' = 'リモートを設定…'
     'clone' = 'リポジトリを複製（Clone）…'
-    'workspace' = '詳細操作…'
+    'workspace' = 'リポジトリの管理…'
+    'identity' = 'コミット作成者の設定…'
 }
+$groupEnds = @('files', 'revert', 'tags', 'remotes')
 if (-not $Uninstall -and -not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'The GitNebula executable does not exist.' }
 foreach ($entry in $entries.GetEnumerator()) {
     # Replace the previous single-command registration on upgrades as well.
@@ -35,6 +47,7 @@ foreach ($entry in $entries.GetEnumerator()) {
         $verb = $entry.Key + '\shell\' + ('{0:D2}' -f $index) + $action.Key
         New-Item -Path ($verb + '\command') -Force | Out-Null
         Set-Item -LiteralPath $verb -Value $action.Value
+        if ($groupEnds -contains $action.Key) { New-ItemProperty -LiteralPath $verb -Name 'CommandFlags' -Value 0x40 -PropertyType DWord -Force | Out-Null }
         # A single Explorer selection per dialog; folders include their descendants.
         New-ItemProperty -LiteralPath $verb -Name 'MultiSelectModel' -Value 'Single' -PropertyType String -Force | Out-Null
         # Append \. for directories so a drive root's trailing slash cannot escape the quote.
