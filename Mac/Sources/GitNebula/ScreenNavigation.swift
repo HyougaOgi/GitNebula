@@ -9,10 +9,11 @@ struct FileComparisonRequest: Sendable {
 }
 
 enum UtilityPage: Equatable {
-    case files, branches, conflicts, identity, settings, tool(RepositoryTool)
+    case files, branches, conflicts, identity, settings, repositoryActions, tool(RepositoryTool)
     var title: String {
         switch self {
         case .settings: return L("アプリの設定")
+        case .repositoryActions: return L("Git 操作")
         case .files: return L("作業ファイルの管理")
         case .branches: return L("ブランチの管理")
         case .conflicts: return L("競合の解決")
@@ -23,6 +24,7 @@ enum UtilityPage: Equatable {
     var hint: String {
         switch self {
         case .settings: return L("SSH 認証、常駐と Git の実行ファイルを設定します。")
+        case .repositoryActions: return L("このリポジトリの機能を選択してください。")
         case .files: return L("ステージ・ステージ解除・無視・変更の破棄を行います。")
         case .branches: return L("ブランチの作成・名前変更・削除・マージを行います。")
         case .conflicts: return L("競合ファイルを解決し、進行中の操作を再開または中止します。")
@@ -107,8 +109,17 @@ final class ScreenNavigation: ObservableObject {
     }
     func back() {
         guard frames.count > 1, !busy else { return }
+        let repository = current?.model?.repository
         current?.model?.isScreenActive = false
         frames.removeLast()
+        if let repository, current?.model?.action == .open, current?.title == GitAction.open.title {
+            current?.model?.isScreenActive = false
+            frames.removeLast()
+            let model = Workspace()
+            model.launch(LaunchRequest(action: .workspace, paths: [repository.path]))
+            append(OperationScreen(model: model, page: .repositoryActions, closeWindow: closeWindow), model: model, title: UtilityPage.repositoryActions.title)
+            return
+        }
         current?.model?.isScreenActive = true
         current?.model?.refreshIfNeeded()
     }

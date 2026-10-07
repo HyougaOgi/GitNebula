@@ -313,6 +313,7 @@ struct OperationScreen: View {
                     case .conflicts: conflictForm
                     case .identity: IdentitySettingsView(model: model)
                     case .settings: AppSettingsView()
+                    case .repositoryActions: RepositoryActionLauncher()
                     case .tool(let tool): RepositoryToolsView(model: model, tool: tool)
                     }
                 } else {

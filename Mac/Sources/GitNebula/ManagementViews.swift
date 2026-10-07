@@ -1,5 +1,34 @@
 import SwiftUI
 
+struct RepositoryActionLauncher: View {
+    @ObservedObject private var appearance = AppearanceSettings.shared
+    @Environment(\.screenActions) private var navigation
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                ForEach(GitAction.menuGroups, id: \.title) { group in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(group.title).font(.headline)
+                        LazyVGrid(columns: columns, spacing: 10) {
+                            ForEach(group.actions, id: \.self) { action in
+                                Button { navigation.openAction(action) } label: {
+                                    HStack(spacing: 10) {
+                                        Image(systemName: action.symbol).frame(width: 20)
+                                        Text(action.title).lineLimit(1)
+                                        Spacer(minLength: 0)
+                                    }.frame(maxWidth: .infinity, alignment: .leading).padding(10)
+                                }.buttonStyle(.bordered).help(action.hint)
+                                    .accessibilityIdentifier("repositoryAction:" + action.rawValue)
+                            }
+                        }
+                    }
+                }
+            }.padding(.vertical, 4)
+        }.accessibilityIdentifier("repositoryActions")
+    }
+}
+
 struct FunctionLauncher: View {
     @ObservedObject private var appearance = AppearanceSettings.shared
     let management: Bool

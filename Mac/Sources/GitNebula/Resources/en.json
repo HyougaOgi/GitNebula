@@ -46,6 +46,7 @@
   "Git を起動できません（": "Could not launch Git (",
   "Git リポジトリを選択": "Choose a Git Repository",
   "Git 操作": "Git Actions",
+  "このリポジトリの機能を選択してください。": "Choose an action for this repository.",
   "Git 操作は完了しましたが、画面の更新に失敗しました。操作を再実行せず「更新」で確認してください。\n": "The Git operation completed, but the screen could not be refreshed. Click Refresh before repeating the operation.\n",
   "GitNebula を終了": "Quit GitNebula",
   "GitNebula を開く": "Open GitNebula",

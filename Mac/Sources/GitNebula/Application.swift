@@ -63,7 +63,11 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         publishLanguage()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: "GitNebula")
+            let icon = NSApp.applicationIconImage?.copy() as? NSImage
+            icon?.size = NSSize(width: 18, height: 18)
+            icon?.isTemplate = false
+            button.image = icon
+            button.setAccessibilityLabel("GitNebula")
             button.target = self; button.action = #selector(statusClick(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }

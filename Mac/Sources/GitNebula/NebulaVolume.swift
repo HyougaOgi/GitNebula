@@ -37,7 +37,8 @@ final class NebulaVolume: NSObject, SCNProgramDelegate {
         material.readsFromDepthBuffer = false; material.blendMode = .alpha
         box.materials = [material]
         let node = SCNNode(geometry: box); node.name = "nebula-volume"
-        node.simdScale = SIMD3<Float>(radius * 3.5, radius * 2.9, radius * 3.3)
+        let extent = radius * 1.5
+        node.simdScale = SIMD3<Float>(extent * 3.5, extent * 2.9, extent * 3.3)
         node.renderingOrder = -10
         return node
     }

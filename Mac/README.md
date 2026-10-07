@@ -25,11 +25,15 @@ cp /tmp/GitNebula.iconset/icon_512x512@2x.png Assets/GitNebula.png
 
 ## App screen and residence
 
+The menu-bar item uses the app's colored Nebula icon at the standard menu-bar size.
+
 Normal startup and reopening the app keep it in the menu bar with no Dock icon or window. The icon menu contains **GitNebula を開く**, **詳細設定…**, **起動オプション** and **GitNebula を終了**. Startup options include **ログイン時に自動起動** (using macOS login items) and **起動時にアプリ画面を開く** (off by default). Login-item registration errors and required system approval are displayed; opening login-item settings is available from both the menu and detailed settings.
 
 **GitNebula を開く** shows a simple app screen with the detailed-settings entry. Repository selection, Clone, Init and recent repositories are not shown there. The resident menu contains no Git operations without a folder context. Finder context-menu actions open their dedicated screen even when the app has no window. Each repository has its own window and navigation history: opening another repository preserves the previous screen, selection and drafts. Requests for an already open repository reuse its window. Close hides the window by default. Git operations are grouped in the same order in Finder and the app: changes, history, branches, remotes, repository.
 
 Detailed settings include **SSH 認証**: select a readable private key (not its `.pub` file), enter its passphrase if encrypted, and click **SSH 設定を保存**. The path is saved in app preferences; the passphrase is saved by Apple's `/usr/bin/ssh-add --apple-use-keychain` and used directly by `/usr/bin/ssh -o UseKeychain=yes` for Clone/Fetch/Pull/Push. GitNebula does not read Apple's protected passphrase store. Saving validates the entered value first, then checks persistence with a new isolated agent; it never changes the user's running agent. Selected keys use `IdentityAgent=none` so removal and storage checks cannot be hidden by a cached key. Saved passphrases stay filled and masked when settings reopen. Clearing the field alone preserves its saved value; **保存したパスフレーズを削除** removes it. A blank key path uses existing SSH configuration/agent. Unsaved passphrases can be entered and saved at connection time. A new host still requires confirmation of the displayed SSH fingerprint. HTTPS continues using Git's credential helper.
+
+After a Finder operation, **戻る** opens that repository's action chooser when the previous screen would have been the app screen. The chooser follows the same categories and order as the Finder menu. Its actions use the repository root, including when Finder originally selected a file. Back from details, settings, or another operation still follows the screen history and preserves drafts.
 
 Cherry-pick and Revert each open a dedicated commit selector with an execute button and confirmation. Rebase and Merge each open a dedicated branch selector. These screens contain no working-file diff list. Requests for a busy repository wait for its operation; other repositories can open independently. Unstage accepts mixed selections and removes only staged changes, preserving working and untracked files. Push explains when an initial commit or branch selection is required.
 
@@ -38,6 +42,10 @@ Detailed settings also include a **Transparency** slider (0–80%), **System / L
 **履歴 → Git グラフ** shows colored branch lanes, merge parents, commit IDs, messages and branch/tag labels. Select a commit and use **コミットを開く**, or double-click it, to view changed files. More history can be loaded in pages of 200.
 
 Switch the graph to **4D** to explore branch logs as stars surrounded by volumetric nebula gas. Each star grows with its loaded commit count, and lines retain the real fork and merge relationships. Select a star to see its grouped log and choose a commit. The gas is ray-marched through 3D turbulence and remains visible from inside. Drag to orbit, scroll to approach, or double-click a star to focus it. Zoom follows a fixed anchor and reversing the same scroll amount returns to the same camera position, including at distance limits. Use the timeline or **履歴を再生** to reveal the history; **全体を表示** resets the camera. Playback pauses while hidden and respects Reduce Motion. Folders without Git metadata explain that a cloned repository is required to display history; GitNebula never creates or invents history there.
+
+The graph remembers the selected **通常 / 4D** display when opened again or after restarting the app. 4D opens with all loaded history visible. Switching one graph leaves other open graph windows in their current display.
+
+The 4D nebula extends 1.5 times farther across each of its three axes while preserving the camera and branch layout.
 
 Pull reports whether it updated the repository or was already current, including commit/file counts and before/after HEAD. Fetch and Push also retain their result and Git output. **戻る** follows the screens actually opened, including Settings and Home, and preserves commit drafts.
 

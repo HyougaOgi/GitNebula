@@ -62,8 +62,13 @@ struct GraphLaneView: View {
     @State private var limit = 200
     @State private var error: String?
     @State private var loading = false
-    @State private var spatial = false
+    @State private var spatial: Bool
     @Environment(\.screenActions) private var navigation
+    private static let displayPreference = "graphSpatialDisplay"
+    init(repo: GitRepository, refreshID: UUID) {
+        self.repo = repo; self.refreshID = refreshID
+        _spatial = State(initialValue: UserDefaults.standard.bool(forKey: Self.displayPreference))
+    }
     private var columns: Int { max(1, rows.map(\.width).max() ?? 1) }
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -74,7 +79,8 @@ struct GraphLaneView: View {
             if let error { Text(error).foregroundStyle(.orange) }
             if rows.isEmpty && !loading { Text(L("まだコミットはありません。")) }
             if spatial {
-                NebulaGraph4D(rows: rows, selection: $selection)
+                if !rows.isEmpty { NebulaGraph4D(rows: rows, selection: $selection) }
+                else { Spacer() }
             } else { GeometryReader { viewport in
             ScrollView([.vertical, .horizontal]) {
                 LazyVStack(alignment: .leading, spacing: 0) {
@@ -105,7 +111,8 @@ struct GraphLaneView: View {
                 if rows.count >= limit { Button(L("さらに読み込む")) { limit += 200 } }
                 if loading { ProgressView().controlSize(.small) }
             }
-        }.task(id: [refreshID.uuidString, String(limit)]) {
+        }.onChange(of: spatial) { UserDefaults.standard.set($0, forKey: Self.displayPreference) }
+        .task(id: [refreshID.uuidString, String(limit)]) {
             loading = true; error = nil
             do {
                 let repo = repo, count = limit
