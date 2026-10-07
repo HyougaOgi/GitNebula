@@ -1,5 +1,11 @@
 import Foundation
 
+struct MissingGitRepository: LocalizedError, Sendable {
+    var errorDescription: String? {
+        L("このフォルダは Git リポジトリではありません。\n履歴を表示するには、取得元を Clone するか、Git リポジトリのフォルダを選択してください。")
+    }
+}
+
 struct Change: Identifiable, Sendable, Equatable {
     var id: String { path }
     let code: String
@@ -92,7 +98,12 @@ struct GitRepository: Sendable {
 
     static func open(_ path: String) throws -> GitRepository {
         let candidate = GitRepository(path: path)
-        var root = try candidate.run(["rev-parse", "--show-toplevel"])
+        let output = try GitProcess.runWithOutput(in: path, arguments: ["rev-parse", "--show-toplevel"], accepting: [0, 128])
+        guard output.status == 0 else {
+            if output.diagnostics.contains("not a git repository") { throw MissingGitRepository() }
+            throw candidate.failure(L("git rev-parse が失敗しました（終了コード 128）。\n") + String(decoding: output.data, as: UTF8.self) + output.diagnostics)
+        }
+        var root = String(decoding: output.data, as: UTF8.self)
         if root.hasSuffix("\n") { root.removeLast() }
         return GitRepository(path: root)
     }

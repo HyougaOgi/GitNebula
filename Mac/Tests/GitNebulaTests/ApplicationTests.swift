@@ -24,7 +24,7 @@ final class ApplicationTests: LocalizedTestCase {
         XCTAssertEqual(delegate.navigation.current?.model?.action, .open)
         delegate.application(NSApplication.shared, open: [try LaunchRequest(action: .diff, paths: [root.path]).url()])
         let deadline = Date().addingTimeInterval(20)
-        while delegate.navigation.current?.model?.busy == true && Date() < deadline { try await Task.sleep(nanoseconds: 50_000_000) }
+        while (delegate.navigation.current?.model?.action != .diff || delegate.navigation.busy) && Date() < deadline { try await Task.sleep(nanoseconds: 50_000_000) }
         XCTAssertTrue(delegate.window === window)
         XCTAssertEqual(delegate.navigation.current?.model?.action, .diff)
         XCTAssertEqual(delegate.navigation.current?.model?.visibleChanges.count, 1)

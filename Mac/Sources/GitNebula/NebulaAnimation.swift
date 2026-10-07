@@ -8,7 +8,7 @@ struct NebulaStar {
     }
     func opacity(at time: Double) -> Double { 0.12 + 0.55 * pow((sin(time * 2 * .pi / period + phase) + 1) / 2, 4) }
 }
-private struct VisibilityProbe: NSViewRepresentable {
+struct VisibilityProbe: NSViewRepresentable {
     @Binding var visible: Bool
     final class Probe: NSView {
         var update: ((Bool) -> Void)?

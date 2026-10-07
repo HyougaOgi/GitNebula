@@ -12,16 +12,35 @@ struct GitNebulaApp {
     }
 }
 
-/// A single app-owned window prevents URL handling and SwiftUI scenes from both
-/// opening a window for the same request. Closing hides it while resident.
+/// Each repository retains its own window, navigation and drafts.
 @MainActor
 final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+    @MainActor private final class WindowContext {
+        let model = Workspace()
+        let navigation = ScreenNavigation()
+        var window: NSWindow?
+        var requestedDirectory: String?
+        var repositoryDirectory: String? {
+            let directory = navigation.frames.reversed().compactMap(\.model).compactMap(\.repository).first?.path ?? model.repository?.path ?? requestedDirectory
+            return directory.map(LaunchRequest.canonicalDirectory)
+        }
+        var busy: Bool { model.busy || navigation.busy }
+    }
     static weak var shared: ApplicationDelegate?
-    let model = Workspace()
-    let navigation = ScreenNavigation()
-    private(set) var window: NSWindow?
+    private let rootContext = WindowContext()
+    private var repositoryContexts: [WindowContext] = []
+    private weak var selectedContext: WindowContext?
+    private var contexts: [WindowContext] { [rootContext] + repositoryContexts }
+    private var currentContext: WindowContext {
+        contexts.first { $0.window === NSApplication.shared.keyWindow && $0.window != nil } ?? selectedContext ?? rootContext
+    }
+    var model: Workspace { currentContext.model }
+    var navigation: ScreenNavigation { currentContext.navigation }
+    var window: NSWindow? { currentContext.window }
+    var windows: [NSWindow] { contexts.compactMap(\.window) }
     private var statusItem: NSStatusItem?
     private var pendingRequests: [LaunchRequest] = []
+    private var routingRequest = false
     private var terminating = false
     private var launched = false
     private var appearanceObserver: NSObjectProtocol?
@@ -83,27 +102,45 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         } else if !request.paths.isEmpty || startupOptions.showWelcomeOnLaunch { showHome(nil) }
     }
     func ensureWindow() {
-        guard window == nil else { return }
+        ensureWindow(for: currentContext)
+    }
+    private func ensureWindow(for context: WindowContext) {
+        guard context.window == nil else { return }
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1220, height: 820), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = "GitNebula"; window.isOpaque = false; window.backgroundColor = .clear
         window.isReleasedWhenClosed = false; window.delegate = self
-        window.contentView = TransparentHostingView(rootView: ContentView(model: model, closeWindow: { [weak window] in window?.performClose(nil) }, navigation: navigation))
-        window.center(); self.window = window
-        navigation.installRoot(model, close: { [weak window] in window?.performClose(nil) })
+        window.contentView = TransparentHostingView(rootView: ContentView(model: context.model, closeWindow: { [weak window] in window?.performClose(nil) }, navigation: context.navigation))
+        window.center()
+        if let previous = currentContext.window, previous !== window {
+            window.setFrameOrigin(NSPoint(x: previous.frame.minX + 28, y: previous.frame.minY - 28))
+        }
+        context.window = window
+        context.navigation.installRoot(context.model, close: { [weak window] in window?.performClose(nil) })
     }
     private func showWindow() {
-        ensureWindow()
-        if window?.isMiniaturized == true { window?.deminiaturize(nil) }
-        window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+        showWindow(for: currentContext)
+    }
+    private func showWindow(for context: WindowContext) {
+        ensureWindow(for: context); selectedContext = context
+        if context.window?.isMiniaturized == true { context.window?.deminiaturize(nil) }
+        context.window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+    }
+    func windowDidBecomeKey(_ notification: Notification) {
+        if let window = notification.object as? NSWindow { selectedContext = contexts.first { $0.window === window } }
     }
     @objc func showHome(_ sender: Any?) {
-        showWindow()
-        if navigation.busy {
-            if pendingRequests.last?.action != .open || pendingRequests.last?.paths.isEmpty != true {
-                pendingRequests.append(LaunchRequest(action: .open, paths: []))
+        let context = currentContext
+        showWindow(for: context)
+        showHomeWhenReady(context)
+    }
+    private func showHomeWhenReady(_ context: WindowContext) {
+        guard !context.busy else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self, weak context] in
+                if let context { self?.showHomeWhenReady(context) }
             }
-            drainRequests()
-        } else { navigation.home() }
+            return
+        }
+        showWindow(for: context); context.navigation.home()
     }
     @objc private func showSettings(_ sender: Any?) {
         showWindow()
@@ -199,8 +236,8 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     }
     @objc func quit(_ sender: Any?) { NSApp.terminate(sender) }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard !navigation.busy else {
-            showWindow()
+        if let working = contexts.first(where: \.busy) {
+            showWindow(for: working)
             let alert = NSAlert(); alert.messageText = L("Git の処理が完了してから終了してください。"); alert.runModal()
             return .terminateCancel
         }
@@ -209,6 +246,7 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         if terminating { return true }
         if residentPreference() { sender.orderOut(nil); return false }
+        if windows.contains(where: { $0 !== sender && $0.isVisible }) { sender.orderOut(nil); return false }
         quit(nil); return false
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -224,16 +262,46 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         if launched || window != nil { drainRequests() }
     }
     private func drainRequests() {
-        guard !pendingRequests.isEmpty else { return }
-        ensureWindow()
-        navigation.installRoot(model, close: { [weak self] in self?.window?.performClose(nil) })
-        guard !navigation.busy else {
-            // Queue a new Finder request rather than discarding a running operation.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.drainRequests() }; return
-        }
+        guard !routingRequest, !pendingRequests.isEmpty else { return }
         let request = pendingRequests.removeFirst()
-        if request.action == .open && request.paths.isEmpty { showHome(nil) }
-        else { navigation.openRequest(request); showWindow() }
+        if request.action == .open && request.paths.isEmpty {
+            showHome(nil)
+            scheduleRequests()
+            return
+        }
+        routingRequest = true
+        Task { [weak self] in
+            guard let self else { return }
+            let directory = request.paths.first.map(LaunchRequest.directory(for:))
+            let resolved = await Task.detached { () -> String? in
+                guard let directory else { return nil }
+                if ![GitAction.clone, .initialize].contains(request.action), let repo = try? GitRepository.open(directory) { return repo.path }
+                return LaunchRequest.canonicalDirectory(directory)
+            }.value
+            let context: WindowContext
+            if let resolved, let existing = self.contexts.first(where: { $0.repositoryDirectory == resolved }) {
+                context = existing
+            } else if resolved == nil || self.currentContext.repositoryDirectory == nil && !self.currentContext.busy {
+                context = self.currentContext
+            } else {
+                context = WindowContext(); self.repositoryContexts.append(context)
+            }
+            if context.busy {
+                self.pendingRequests.append(request)
+            } else {
+                context.requestedDirectory = resolved
+                self.ensureWindow(for: context)
+                if let current = context.navigation.current?.model,
+                   current.action == request.action && current.request(for: request.action).paths == request.paths {
+                    current.refresh()
+                } else { context.navigation.openRequest(request) }
+                self.showWindow(for: context)
+            }
+            self.routingRequest = false
+            self.scheduleRequests()
+        }
+    }
+    private func scheduleRequests() {
         if !pendingRequests.isEmpty { DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.drainRequests() } }
     }
 }

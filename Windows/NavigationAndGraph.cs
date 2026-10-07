@@ -5,11 +5,11 @@ using System.Windows.Shapes;
 namespace GitNebula;
 public partial class MainWindow
 {
-    private sealed record Route(string Action, LaunchRequest Request, GitRepository? Repository, string Message, string[] Selected, string Status, RemoteOperationReport? Report, string CloneSource, string CloneParent);
+    private sealed record Route(string Action, LaunchRequest Request, GitRepository? Repository, string Message, string[] Selected, string Status, bool CommitCompleted, RemoteOperationReport? Report, string CloneSource, string CloneParent);
     private readonly Stack<Route> routeHistory = new();
     private RemoteOperationReport? transferReport;
     private int graphLimit = 200;
-    private void CaptureRoute() => routeHistory.Push(new(action, request, repository, Message.Text, selected.ToArray(), Status.Text, transferReport, CloneSource.Text, CloneParent.Text));
+    private void CaptureRoute() => routeHistory.Push(new(action, request, repository, Message.Text, selected.ToArray(), Status.Text, commitCompleted, transferReport, CloneSource.Text, CloneParent.Text));
     private void Navigate(string target)
     {
         if (busy || target == action) return;
@@ -22,7 +22,7 @@ public partial class MainWindow
         Message.Text = previous.Message; selected.Clear(); selected.UnionWith(previous.Selected); initialSelection = false;
         transferReport = previous.Report; CloneSource.Text = previous.CloneSource; CloneParent.Text = previous.CloneParent;
         // Refresh once after restoring the route; SetAction must not start a competing refresh.
-        busy = true; SetAction(previous.Action); busy = false;
+        busy = true; SetAction(previous.Action); commitCompleted = previous.CommitCompleted; busy = false;
         if (repository != null && action is not ("open" or "settings" or "clone")) await Act(Refresh, previous.Status);
         else { Status.Text = previous.Status; Controls(); }
         if (transferReport != null) { RemoteResult.Text = transferReport.Summary; RemoteOutput.Text = transferReport.Output; }

@@ -12,6 +12,9 @@ final class NebulaRenderer {
     private let queue: MTLCommandQueue
     private let pipeline: MTLRenderPipelineState
     private let noise: MTLTexture
+    // SceneKit samples the same spatial noise directly, without flattening it to an image.
+    var volumeNoise: MTLTexture { noise }
+    var metalDevice: MTLDevice { device }
     init(device: MTLDevice) throws {
         self.device = device
         guard let queue = device.makeCommandQueue() else { throw Self.error() }

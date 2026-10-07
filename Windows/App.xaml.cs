@@ -71,16 +71,28 @@ public partial class App : Application
                 var json = await reader.ReadLineAsync(stopping.Token);
                 var request = JsonSerializer.Deserialize<LaunchRequest>(json ?? "") ?? throw new ArgumentException(Localization.Text("起動要求が空です。"));
                 if (!LaunchRequest.Actions.ContainsKey(request.Action)) throw new ArgumentException(Localization.Text("不明な操作です。"));
-                while (window.IsBusy) await Task.Delay(100, stopping.Token);
-                await window.ShowRequest(request);
+                await OpenRequest(window, request);
             } catch (OperationCanceledException) { break; }
             catch (Exception error) { MessageBox.Show(error.Message, "GitNebula", MessageBoxButton.OK, MessageBoxImage.Error); }
         }
     }
+    private async Task OpenRequest(MainWindow home, LaunchRequest request)
+    {
+        string? directory = request.Paths.FirstOrDefault() is { } entry ? LaunchRequest.DirectoryFor(entry) : null;
+        if (directory != null && request.Action is not ("clone" or "init" or "settings")) {
+            var candidate = new GitRepository(directory);
+            try { await candidate.Open(); directory = candidate.Path; } catch (InvalidOperationException) { }
+        }
+        var target = directory == null ? home : Windows.OfType<MainWindow>().FirstOrDefault(w => string.Equals(w.RepositoryDirectory, directory, StringComparison.OrdinalIgnoreCase));
+        if (target == null) {
+            target = home.RepositoryDirectory == null && !home.IsBusy ? home : new MainWindow();
+        }
+        await target.ShowRequest(request);
+    }
     public void Quit()
     {
         if (IsExiting) return;
-        if (MainWindow is MainWindow window && window.IsBusy) { MessageBox.Show(Localization.Text("Git の処理が完了してから終了してください。"), "GitNebula"); return; }
+        if (Windows.OfType<MainWindow>().Any(window => window.IsBusy)) { MessageBox.Show(Localization.Text("Git の処理が完了してから終了してください。"), "GitNebula"); return; }
         IsExiting = true; stopping.Cancel(); if (tray != null) tray.Visible = false;
         Shutdown();
     }

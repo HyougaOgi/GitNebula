@@ -57,6 +57,7 @@ final class Workspace: ObservableObject {
         perform({ try Snapshot(repo) }, apply: apply)
     }
     func request(for action: GitAction) -> LaunchRequest {
+        if action == .push, let repository { return LaunchRequest(action: action, paths: [repository.path]) }
         let paths = request.paths.isEmpty ? repository.map { [$0.path] } ?? [] : request.paths
         return LaunchRequest(action: action, paths: paths)
     }
@@ -77,7 +78,9 @@ final class Workspace: ObservableObject {
     @Published var status = L("準備完了")
     @Published var busy = false
     @Published var succeeded = false
+    @Published private(set) var commitCompleted = false
     @Published var failed = false
+    @Published var missingRepository = false
     @Published var cloneSource = ""
     @Published var cloneParent = ""
     var cloneDestination: String { (try? CloneLocation.destination(parent: cloneParent, source: cloneSource)) ?? "" }
@@ -113,6 +116,7 @@ final class Workspace: ObservableObject {
                 apply(result); status = message?(result) ?? success; succeeded = status != L("準備完了")
                 if notifiesChanges { notifyRepositoryChanged() }
             } catch {
+                missingRepository = error is MissingGitRepository
                 let message = error.localizedDescription
                 var refreshError = ""
                 if let repo = repository {
@@ -131,7 +135,7 @@ final class Workspace: ObservableObject {
         launchID = UUID(); request = newRequest; action = request.action; initialSelection = true
         repository = nil; changes = []; selected = []; conflicts = []; merging = false; chosenRemote = ""; chosenBranch = ""
         sequence = nil; head = nil; transferReport = nil
-        message = ""; status = L("準備完了"); succeeded = false; failed = false
+        message = ""; status = L("準備完了"); succeeded = false; failed = false; commitCompleted = false; missingRepository = false
         if action == .clone {
             cloneParent = request.paths.first.map(LaunchRequest.directory) ?? NSHomeDirectory()
             return
@@ -177,7 +181,7 @@ final class Workspace: ObservableObject {
         selectAction(.open); refresh()
     }
     func selectAction(_ value: GitAction) {
-        action = value; selected.formIntersection(Set(visibleChanges.map(\.path))); status = L("準備完了"); succeeded = false; failed = false; transferReport = nil
+        action = value; selected.formIntersection(Set(visibleChanges.map(\.path))); status = L("準備完了"); succeeded = false; failed = false; transferReport = nil; commitCompleted = false
         if value == .clone, cloneParent.isEmpty {
             cloneParent = repository?.path ?? NSHomeDirectory()
         }
@@ -190,9 +194,10 @@ final class Workspace: ObservableObject {
     }
     func commit() {
         let paths = Array(selected.intersection(Set(visibleChanges.map(\.path)))), text = message
-        guard let repo = repository else { return }
-        perform({ try repo.commit(paths, text); return try Snapshot.afterOperation(repo) }, success: L("コミットしました。閉じて作業に戻れます。"), notifiesChanges: true) {
-            self.apply($0); self.message = ""
+        guard !busy, let repo = repository else { return }
+        commitCompleted = false
+        perform({ try repo.commit(paths, text); return try Snapshot.afterOperation(repo) }, success: L("コミットしました。"), notifiesChanges: true) {
+            self.apply($0); self.message = ""; self.commitCompleted = true
         }
     }
     func runAction() {
@@ -296,7 +301,8 @@ struct OperationScreen: View {
             else if model.repository == nil {
                 VStack(spacing: 18) {
                     Image(systemName: "folder.badge.questionmark").font(.system(size: 40)).foregroundStyle(accent)
-                    Text(L("操作するリポジトリを選択してください。"))
+                    Text(model.missingRepository ? L("Git の履歴がないフォルダです。") : L("操作するリポジトリを選択してください。"))
+                    if model.missingRepository { Button("Clone") { navigation.openAction(.clone) } }
                     Button(L("フォルダを選択"), action: model.chooseRepository).buttonStyle(.borderedProminent)
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -332,6 +338,7 @@ struct OperationScreen: View {
                                 Text(L("\(model.selected.count) ファイルを選択")).foregroundStyle(.secondary)
                                 Spacer()
                                 Button(L("コミット"), action: model.commit).buttonStyle(.borderedProminent).keyboardShortcut(.return, modifiers: .command)
+                                    .accessibilityIdentifier("executeCommit")
                                     .disabled(model.selected.isEmpty || model.message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.sequence != nil)
                             }
                         }
@@ -353,6 +360,10 @@ struct OperationScreen: View {
                     ScrollView { Text(LT(model.status)).font(.callout).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }.frame(maxHeight: model.failed ? 90 : 38)
                     if model.failed && (remoteAction || model.action == .clone) {
                         Button(L("SSH の設定")) { navigation.openUtility(.settings) }
+                    }
+                    if model.action == .commit && model.commitCompleted {
+                        Button("Push") { navigation.openAction(.push) }
+                            .buttonStyle(.borderedProminent).accessibilityIdentifier("pushAfterCommit")
                     }
                     Button(L("閉じる")) { navigation.close() }.keyboardShortcut(.cancelAction)
                 }

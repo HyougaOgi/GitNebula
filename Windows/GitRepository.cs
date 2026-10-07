@@ -10,7 +10,13 @@ public sealed partial class GitRepository(string path)
 {
     public string Path { get; private set; } = path;
     public Task<string> Run(params string[] args) => GitProcess.Run(Path, args);
-    public async Task Open() => Path = (await Run("rev-parse", "--show-toplevel")).TrimEnd('\r', '\n');
+    public async Task Open()
+    {
+        try { Path = (await Run("rev-parse", "--show-toplevel")).TrimEnd('\r', '\n'); }
+        catch (InvalidOperationException error) when (error.Message.Contains("not a git repository", StringComparison.Ordinal)) {
+            throw new InvalidOperationException(Localization.Text("このフォルダは Git リポジトリではありません。\n履歴を表示するには、取得元を Clone するか、Git リポジトリのフォルダを選択してください。"), error);
+        }
+    }
     public async Task<List<Change>> Changes()
     {
         var entries = (await Run("status", "--porcelain=v1", "-z", "--untracked-files=all")).Split('\0');

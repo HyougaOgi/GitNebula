@@ -11,9 +11,16 @@ public partial class MainWindow : Window
     private readonly HashSet<string> selected = [];
     private bool busy;
     public bool IsBusy => busy;
+    public string? RepositoryDirectory {
+        get {
+            if (repository != null) return repository.Path;
+            return request.Paths.FirstOrDefault() is { } entry ? LaunchRequest.DirectoryFor(entry) : null;
+        }
+    }
     private bool homeRequested;
     private bool initialRequestHandled;
     private bool hasHead;
+    private bool commitCompleted;
     private string? sequence;
     private readonly Dictionary<string, string> drafts = new();
     private LaunchRequest request = new("open", []);
@@ -24,6 +31,7 @@ public partial class MainWindow : Window
     public MainWindow(LaunchRequest? initialRequest)
     {
         initialRequestHandled = initialRequest == null || initialRequest.Action == "open" && initialRequest.Paths.Length == 0;
+        request = initialRequest ?? new("open", []);
         InitializeComponent();
         OtherActions.Items.Add(new ComboBoxItem { Content = Localization.Text("機能を選ぶ…"), Tag = "placeholder" });
         foreach (var group in LaunchRequest.MenuGroups)
@@ -37,9 +45,9 @@ public partial class MainWindow : Window
         initialized = true; OtherActions.SelectedIndex = 0; SetAction("open"); InitializeAppearance();
         Closing += (_, e) => {
             if (Application.Current is App exiting && exiting.IsExiting) return;
-            if (AppSettings.Current.KeepRunning && Application.Current is App app && app.ResidentEnabled) { e.Cancel = true; Hide(); }
+            if (Application.Current is App app && app.ResidentEnabled && (AppSettings.Current.KeepRunning || app.Windows.OfType<MainWindow>().Any(w => w != this && w.IsVisible))) { e.Cancel = true; Hide(); }
             else if (busy) e.Cancel = true;
-            else if (Application.Current is App running && running.ResidentEnabled) running.Quit();
+            else if (Application.Current is App running && running.ResidentEnabled) { e.Cancel = true; running.Quit(); }
         };
         Loaded += async (_, _) => {
             if (initialRequestHandled) return;
@@ -54,6 +62,7 @@ public partial class MainWindow : Window
     private void SetAction(string name)
     {
         action = name;
+        commitCompleted = false;
         Heading.Text = LaunchRequest.Actions[name].Title; Hint.Text = LaunchRequest.Actions[name].Hint;
         Title = name == "open" ? "GitNebula" : Heading.Text + " — GitNebula";
         Width = 1050;
@@ -133,6 +142,8 @@ public partial class MainWindow : Window
         OtherActions.Visibility = Show(action is not ("open" or "settings"));
         RefreshButton.IsEnabled = ready;
         CommitButton.IsEnabled = ready && selected.Count > 0 && !string.IsNullOrWhiteSpace(Message.Text) && !hasConflicts;
+        PushAfterCommitButton.Visibility = Show(action == "commit" && repository != null && commitCompleted);
+        PushAfterCommitButton.IsEnabled = ready;
         SelectionCount.Text = Localization.Format($"{selected.Count} ファイルを選択");
         ExecuteButton.Content = Heading.Text;
         ExecuteButton.IsEnabled = ready && RemoteChoice.SelectedItem != null && (action == "fetch" || hasHead && currentBranch != "detached HEAD" && (action != "pull" || allChanges.Count == 0 && !hasConflicts));
@@ -225,6 +236,7 @@ public partial class MainWindow : Window
     }
     private async Task OpenPath(string path)
     {
+        commitCompleted = false;
         RepositoryPath.Text = path;
         var candidate = new GitRepository(LaunchRequest.DirectoryFor(path)); await candidate.Open();
         foreach (var selectedPath in request.Paths.Skip(1))
@@ -340,8 +352,14 @@ public partial class MainWindow : Window
         }
         if (visibleChanges.Count == 0) Files.Children.Add(new TextBlock { Text = Localization.Text("対象に未コミットの変更はありません。"), Margin = new Thickness(12) });
     }
-    private async void Commit_Click(object sender, RoutedEventArgs e) => await Act(async () => {
-        if (repository == null) throw new InvalidOperationException(Localization.Text("リポジトリを開いてください。"));
-        await repository.Commit(selected.ToArray(), Message.Text); Message.Clear(); await RefreshAfterOperation();
-    }, Localization.Text("コミットしました。閉じて作業に戻れます。"));
+    private async void Commit_Click(object sender, RoutedEventArgs e)
+    {
+        if (busy) return;
+        commitCompleted = false;
+        await Act(async () => {
+            if (repository == null) throw new InvalidOperationException(Localization.Text("リポジトリを開いてください。"));
+            await repository.Commit(selected.ToArray(), Message.Text); Message.Clear(); await RefreshAfterOperation();
+            commitCompleted = true;
+        }, Localization.Text("コミットしました。"));
+    }
 }

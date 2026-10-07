@@ -62,13 +62,20 @@ struct GraphLaneView: View {
     @State private var limit = 200
     @State private var error: String?
     @State private var loading = false
+    @State private var spatial = false
     @Environment(\.screenActions) private var navigation
     private var columns: Int { max(1, rows.map(\.width).max() ?? 1) }
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            Picker(L("表示"), selection: $spatial) {
+                Text(L("通常")).tag(false)
+                Text("4D").tag(true)
+            }.pickerStyle(.segmented).frame(width: 180).accessibilityIdentifier("graphDisplayMode")
             if let error { Text(error).foregroundStyle(.orange) }
             if rows.isEmpty && !loading { Text(L("まだコミットはありません。")) }
-            GeometryReader { viewport in
+            if spatial {
+                NebulaGraph4D(rows: rows, selection: $selection)
+            } else { GeometryReader { viewport in
             ScrollView([.vertical, .horizontal]) {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(rows) { row in
@@ -90,7 +97,7 @@ struct GraphLaneView: View {
                 }.frame(width: max(viewport.size.width, CGFloat(columns) * 20 + 760))
                     .frame(minHeight: viewport.size.height, alignment: .topLeading)
             }.accessibilityIdentifier("gitGraph")
-            }
+            } }
             HStack {
                 Text(L("\(rows.count) コミット")).foregroundStyle(.secondary)
                 Spacer()

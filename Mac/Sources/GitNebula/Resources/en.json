@@ -106,6 +106,7 @@
   "コミット ID をコピー": "Copy Commit ID",
   "コミット ID・メッセージ・作成者を検索": "Search by commit ID, message or author",
   "コミットしました。閉じて作業に戻れます。": "Commit completed. You can return to your work.",
+  "コミットしました。": "Commit completed.",
   "コミットの一覧・説明・変更ファイルを表示します。": "View commits, descriptions and changed files.",
   "コミットの内容": "Commit Details",
   "コミットの説明と変更ファイル一覧を表示します。": "View the commit message and changed files.",
@@ -619,5 +620,16 @@
   "鍵またはパスフレーズを確認してください。\n": "Check your key and passphrase.\n",
   "パスフレーズを保存できませんでした。SSH の設定を確認してください。": "Could not save the passphrase. Check your SSH settings.",
   "保存したパスフレーズを削除できませんでした。": "Could not delete the saved passphrase.",
-  "SSH の認証処理を起動できませんでした。": "Could not start SSH authentication."
+  "SSH の認証処理を起動できませんでした。": "Could not start SSH authentication.",
+  "このフォルダは Git リポジトリではありません。\n履歴を表示するには、取得元を Clone するか、Git リポジトリのフォルダを選択してください。": "This folder is not a Git repository.\nClone the source repository or select a Git repository folder to view its history.",
+  "git rev-parse が失敗しました（終了コード 128）。\n": "git rev-parse failed (exit code 128).\n",
+  "Git の履歴がないフォルダです。": "This folder has no Git history.",
+  "ドラッグで回転・スクロールで接近・ダブルクリックで星へ": "Drag to orbit · Scroll to approach · Double-click to focus a star",
+  "全体を表示": "Show all",
+  "一時停止": "Pause",
+  "履歴を再生": "Play history",
+  "時間軸": "Timeline",
+  "星雲のコミットグラフ": "Nebula commit graph",
+  "通常": "Standard",
+  "分岐 {0}": "Branch {0}"
 }

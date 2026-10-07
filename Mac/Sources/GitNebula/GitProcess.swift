@@ -3,7 +3,7 @@ import Foundation
 /// All Git commands use argument arrays and a noninteractive process environment.
 /// Only executable discovery and process IO are platform specific.
 struct GitProcess {
-    struct Output: Sendable { let data: Data; let diagnostics: String }
+    struct Output: Sendable { let data: Data; let diagnostics: String; let status: Int32 }
     static var executable: String {
         let configured = UserDefaults.standard.string(forKey: "gitExecutable") ?? ""
         if !configured.isEmpty { return configured }
@@ -47,6 +47,6 @@ struct GitProcess {
             let sshHint = details.contains("Permission denied (publickey)") || details.contains("Load key") || details.contains("Host key verification failed") ? L("\n詳細設定の「SSH 認証」で秘密鍵とパスフレーズを確認してください。") : ""
             throw GitRepository(path: path).failure(L("git \(arguments.first ?? "") が失敗しました（終了コード \(process.terminationStatus)）。\n\(details)\(sshHint)"))
         }
-        return Output(data: data, diagnostics: diagnostics)
+        return Output(data: data, diagnostics: diagnostics, status: process.terminationStatus)
     }
 }

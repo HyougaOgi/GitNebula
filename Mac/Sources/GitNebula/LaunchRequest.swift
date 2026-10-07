@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 enum GitAction: String, CaseIterable, Sendable {
     case open, commit, diff, log, pull, push, fetch, switchBranch = "switch", clone, initialize = "init", stash, tags, remotes
@@ -147,6 +148,11 @@ struct LaunchRequest: Sendable {
             return URL(fileURLWithPath: path).deletingLastPathComponent().path
         }
         return path
+    }
+    static func canonicalDirectory(_ path: String) -> String {
+        guard let resolved = realpath(path, nil) else { return URL(fileURLWithPath: path).standardizedFileURL.path }
+        defer { free(resolved) }
+        return String(cString: resolved)
     }
 
     static func inputPath(_ input: String) throws -> String {
