@@ -9,8 +9,8 @@ struct HomeScreen: View {
         VStack(spacing: 24) {
             if navigation.canGoBack { HStack { Button(L("戻る"), action: navigation.back).accessibilityIdentifier("navigateBack"); Spacer() } }
             Spacer()
-            NebulaScene().frame(width: 440, height: 260)
-            Text("GitNebula").font(.system(size: 38, weight: .semibold)).accessibilityIdentifier("appHomeTitle")
+            NebulaScene().frame(width: 640, height: 380)
+            NebulaTitle().font(.system(size: 38, weight: .semibold))
             Button(L("詳細設定")) { navigation.openUtility(.settings) }.font(.system(size: 17)).controlSize(.large).buttonStyle(.borderedProminent).accessibilityIdentifier("openAppSettings")
             Spacer()
         }.frame(maxWidth: .infinity, maxHeight: .infinity).accessibilityElement(children: .contain).accessibilityIdentifier("homeScreen")

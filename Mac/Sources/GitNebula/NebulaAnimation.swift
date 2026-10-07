@@ -25,6 +25,46 @@ private struct VisibilityProbe: NSViewRepresentable {
     func makeNSView(context: Context) -> Probe { let view = Probe(); view.update = { visible = $0 }; return view }
     func updateNSView(_ view: Probe, context: Context) { view.update = { visible = $0 } }
 }
+
+struct NebulaTitle: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var visible = false
+    private static let epoch = Date()
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 24, paused: !visible || reduceMotion)) { timeline in
+            let time = reduceMotion ? 0 : timeline.date.timeIntervalSince(Self.epoch)
+            Text("GitNebula")
+                .foregroundStyle(gradient(at: time))
+                .accessibilityIdentifier("appHomeTitle")
+        }
+        .background(VisibilityProbe(visible: $visible).frame(width: 0, height: 0))
+        .allowsHitTesting(false)
+    }
+
+    private func gradient(at time: TimeInterval) -> LinearGradient {
+        // Keep the nebula's cyan, violet and rose legible in both appearances.
+        let palette: [(Double, Double, Double)] = scheme == .dark
+            ? [(0.28, 0.79, 0.99), (0.50, 0.59, 1.00), (0.81, 0.51, 0.98), (1.00, 0.49, 0.73)]
+            : [(0.08, 0.37, 0.69), (0.37, 0.25, 0.73), (0.57, 0.20, 0.64), (0.70, 0.17, 0.39)]
+        let stops = (0...8).map { index -> Gradient.Stop in
+            let location = Double(index) / 8
+            let position = location * 3 + time / 9
+            let phase = position - floor(position / Double(palette.count)) * Double(palette.count)
+            let first = Int(phase)
+            let fraction = phase - Double(first)
+            let blend = fraction * fraction * (3 - 2 * fraction)
+            let a = palette[first], b = palette[(first + 1) % palette.count]
+            let color = Color(red: a.0 + (b.0 - a.0) * blend,
+                              green: a.1 + (b.1 - a.1) * blend,
+                              blue: a.2 + (b.2 - a.2) * blend)
+            return Gradient.Stop(color: color, location: location)
+        }
+        return LinearGradient(stops: stops, startPoint: .leading, endPoint: .trailing)
+    }
+}
+
 struct NebulaBackground: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion

@@ -14,6 +14,15 @@ bash Mac/install.sh
 
 For packaging only, run `bash Mac/package.sh --unsigned`. The package is written to `dist/mac/GitNebula-unsigned.zip`. Development packages use an ad-hoc signature, not a trusted Developer ID signature.
 
+The app icon is a still frame of the startup screen's nebula, exported to `Assets/GitNebula.png`. Packaging uses this image and works without a Metal device. To regenerate it after changing the nebula renderer, run the following on a Mac with Metal support:
+
+```sh
+cd Mac
+xcrun swiftc -parse-as-library make-icon.swift Sources/GitNebula/NebulaRenderer.swift -o /tmp/gitnebula-make-icon
+/tmp/gitnebula-make-icon /tmp/GitNebula.iconset --render
+cp /tmp/GitNebula.iconset/icon_512x512@2x.png Assets/GitNebula.png
+```
+
 ## App screen and residence
 
 Normal startup and reopening the app keep it in the menu bar with no Dock icon or window. The icon menu contains **GitNebula を開く**, **詳細設定…**, **起動オプション** and **GitNebula を終了**. Startup options include **ログイン時に自動起動** (using macOS login items) and **起動時にアプリ画面を開く** (off by default). Login-item registration errors and required system approval are displayed; opening login-item settings is available from both the menu and detailed settings.
@@ -24,7 +33,7 @@ Detailed settings include **SSH 認証**: select a readable private key (not its
 
 Cherry-pick and Revert each open a dedicated commit selector with an execute button and confirmation. Rebase and Merge each open a dedicated branch selector. These screens contain no working-file diff list. A welcome or Finder request during a Git operation waits for completion before changing screens. Unstage accepts mixed selections and removes only staged changes, preserving working and untracked files. Push explains when an initial commit or branch selection is required.
 
-Detailed settings also include a **Transparency** slider (0–80%), **System / Light / Dark** appearance, and **Japanese / English** language. Changes apply immediately and persist. The macOS slider changes the actual background alpha, exposing the windows behind it while keeping text and controls opaque. System appearance follows macOS changes immediately. Home renders translucent nebula gas with GPU turbulence, flowing filaments, dark dust and independently twinkling stars. Animation pauses while the window is hidden and respects Reduce Motion.
+Detailed settings also include a **Transparency** slider (0–80%), **System / Light / Dark** appearance, and **Japanese / English** language. Changes apply immediately and persist. The macOS slider changes the actual background alpha, exposing the windows behind it while keeping text and controls opaque. System appearance follows macOS changes immediately. Home renders translucent nebula gas with GPU turbulence, flowing filaments, dark dust and independently twinkling stars. Its GitNebula title slowly flows through matching cyan, violet and rose colors, with darker shades in light appearance. Animation pauses while the window is hidden and respects Reduce Motion.
 
 **履歴 → Git グラフ** shows colored branch lanes, merge parents, commit IDs, messages and branch/tag labels. Select a commit and use **コミットを開く**, or double-click it, to view changed files. More history can be loaded in pages of 200.
 
