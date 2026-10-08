@@ -9,6 +9,10 @@ struct CommitRecord: Identifiable, Sendable, Equatable {
     let decorations: String
     let subject: String
     let message: String
+    var committer = ""
+    var committerEmail = ""
+    var commitDate = ""
+    var tree = ""
     var shortID: String { String(id.prefix(8)) }
     var displayDate: String { String(date.prefix(16)).replacingOccurrences(of: "T", with: " ") }
     func matches(_ query: String) -> Bool {
@@ -105,15 +109,14 @@ extension GitRepository {
         if let reference { refs = [try revision(reference)] }
         else { refs = ["--all"] + (head.map { [$0] } ?? []) }
         if let file { _ = try fileURL(file) }
-        let output = try run(["--literal-pathspecs", "log", "--no-color", topological ? "--topo-order" : "--date-order", "--decorate=short", "-z", "--max-count=\(limit)", "--skip=\(skip)", "--format=%H%x00%P%x00%an%x00%ae%x00%aI%x00%D%x00%s%x00%B"] + (file == nil ? [] : ["--follow"]) + refs + ["--"] + (file.map { [$0] } ?? []))
+        let output = try run(["--literal-pathspecs", "log", "--no-color", topological ? "--topo-order" : "--date-order", "--decorate=short", "-z", "--max-count=\(limit)", "--skip=\(skip)", "--format=%H%x00%P%x00%an%x00%ae%x00%aI%x00%D%x00%s%x00%B%x00%cn%x00%ce%x00%cI%x00%T"] + (file == nil ? [] : ["--follow"]) + refs + ["--"] + (file.map { [$0] } ?? []))
         var fields = output.components(separatedBy: "\0")
         if fields.last == "" { fields.removeLast() }
-        guard fields.count % 8 == 0 else { throw failure(L("コミット履歴を読み取れませんでした。")) }
+        guard fields.count % 12 == 0 else { throw failure(L("コミット履歴を読み取れませんでした。")) }
         var records: [CommitRecord] = []
-        for i in stride(from: 0, to: fields.count, by: 8) {
+        for i in stride(from: 0, to: fields.count, by: 12) {
             let parents = fields[i + 1].split(separator: " ").map(String.init)
-            let message = fields[i + 7].trimmingCharacters(in: .newlines)
-            records.append(CommitRecord(id: fields[i], parents: parents, author: fields[i + 2], email: fields[i + 3], date: fields[i + 4], decorations: fields[i + 5], subject: fields[i + 6], message: message))
+            records.append(CommitRecord(id: fields[i], parents: parents, author: fields[i + 2], email: fields[i + 3], date: fields[i + 4], decorations: fields[i + 5], subject: fields[i + 6], message: fields[i + 7], committer: fields[i + 8], committerEmail: fields[i + 9], commitDate: fields[i + 10], tree: fields[i + 11]))
         }
         return records
     }

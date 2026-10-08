@@ -632,5 +632,20 @@
   "時間軸": "Timeline",
   "星雲のコミットグラフ": "Nebula commit graph",
   "通常": "Standard",
-  "分岐 {0}": "Branch {0}"
+  "分岐 {0}": "Branch {0}",
+  "コミット情報": "Commit Details",
+  "コミット ID": "Commit ID",
+  "作成者のメール": "Author Email",
+  "作成日時": "Author Date",
+  "コミットした人": "Committer",
+  "コミットした人のメール": "Committer Email",
+  "コミット日時": "Commit Date",
+  "親コミット": "Parent Commits",
+  "ブランチ・タグ": "Branches / Tags",
+  "ツリー ID": "Tree ID",
+  "全体をコピー": "Copy All",
+  "コピーしました": "Copied",
+  "コピーできませんでした。再度お試しください。": "Could not copy. Please try again.",
+  "{0}をコピー": "Copy {0}",
+  "実行先: {0}": "Target branch: {0}"
 }

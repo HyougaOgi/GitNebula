@@ -92,19 +92,7 @@ struct CommitInspector: View {
     private var base: String? { parent ?? commit.parents.first }
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(commit.subject).font(.headline).textSelection(.enabled)
-                    Text(commit.author + " <" + commit.email + ">  ·  " + commit.displayDate).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-                }
-                Spacer()
-                Button { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(commit.id, forType: .string) } label: {
-                    Label(commit.shortID, systemImage: "doc.on.doc").font(.system(.caption, design: .monospaced))
-                }.help(L("コミット ID をコピー"))
-            }.padding(.horizontal, 10).padding(.top, 8)
-            if commit.message != commit.subject {
-                ScrollView { Text(commit.message).font(.callout).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }.frame(maxHeight: 60).padding(.horizontal, 10)
-            }
+            CommitDetailsView(commit: commit).frame(minHeight: 150, idealHeight: 220, maxHeight: 280)
             HStack {
                 if commit.parents.count > 1 {
                     Picker(L("比較する親"), selection: Binding(get: { base ?? "" }, set: { parent = $0 })) {

@@ -18,7 +18,6 @@ struct NebulaGraph4D: View {
     private var moment: CommitRecord? { rows.isEmpty ? nil : rows[rows.count - count].commit }
     private var branches: [NebulaBranch] { NebulaBranch.group(rows) }
     private var selectedBranch: NebulaBranch? { branches.first { branch in branch.rows.contains { $0.id == selection } } ?? branches.first }
-    private var selectedCommit: CommitRecord? { rows.first { $0.id == selection }?.commit }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -58,13 +57,6 @@ struct NebulaGraph4D: View {
                 Text(L("ドラッグで回転・スクロールで接近・ダブルクリックで星へ")).font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 Button(L("全体を表示")) { cameraReset += 1 }.accessibilityIdentifier("graphResetCamera")
-            }
-            if let commit = selectedCommit {
-                HStack {
-                    Text(commit.shortID).font(.system(.body, design: .monospaced))
-                    Text(commit.subject).lineLimit(1)
-                    if !commit.decorations.isEmpty { Text(commit.decorations).font(.caption).foregroundStyle(.purple).lineLimit(1) }
-                }.accessibilityIdentifier("graphSelectedCommit")
             }
             HStack(spacing: 12) {
                 Button(playing ? L("一時停止") : L("履歴を再生")) {

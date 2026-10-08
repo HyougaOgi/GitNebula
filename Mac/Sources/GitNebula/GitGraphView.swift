@@ -70,6 +70,7 @@ struct GraphLaneView: View {
         _spatial = State(initialValue: UserDefaults.standard.bool(forKey: Self.displayPreference))
     }
     private var columns: Int { max(1, rows.map(\.width).max() ?? 1) }
+    private var selectedCommit: CommitRecord? { rows.first { $0.id == selection }?.commit }
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Picker(L("表示"), selection: $spatial) {
@@ -78,32 +79,17 @@ struct GraphLaneView: View {
             }.pickerStyle(.segmented).frame(width: 180).accessibilityIdentifier("graphDisplayMode")
             if let error { Text(error).foregroundStyle(.orange) }
             if rows.isEmpty && !loading { Text(L("まだコミットはありません。")) }
-            if spatial {
-                if !rows.isEmpty { NebulaGraph4D(rows: rows, selection: $selection) }
-                else { Spacer() }
-            } else { GeometryReader { viewport in
-            ScrollView([.vertical, .horizontal]) {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(rows) { row in
-                        HStack(spacing: 12) {
-                            GraphLaneView(row: row, columns: columns)
-                            Text(row.commit.shortID).font(.system(.body, design: .monospaced)).foregroundStyle(.secondary).frame(width: 80)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(row.commit.subject).lineLimit(1)
-                                if !row.commit.decorations.isEmpty { Text(row.commit.decorations).font(.caption).foregroundStyle(.purple).lineLimit(1) }
-                            }.frame(minWidth: 300, maxWidth: .infinity, alignment: .leading)
-                            Text(row.commit.author).foregroundStyle(.secondary).frame(width: 130, alignment: .leading)
-                            Text(row.commit.displayDate).font(.caption).foregroundStyle(.secondary).frame(width: 150, alignment: .trailing)
-                        }.frame(height: 48).padding(.horizontal, 8)
-                            .background(selection == row.id ? Color.accentColor.opacity(0.12) : .clear)
-                            .contentShape(Rectangle()).onTapGesture { selection = row.id }
-                            .onTapGesture(count: 2) { navigation.openRevision(repo, row.id, false) }
-                            .accessibilityElement(children: .combine)
-                    }
-                }.frame(width: max(viewport.size.width, CGFloat(columns) * 20 + 760))
-                    .frame(minHeight: viewport.size.height, alignment: .topLeading)
-            }.accessibilityIdentifier("gitGraph")
-            } }
+            VSplitView {
+                Group {
+                    if spatial {
+                        if !rows.isEmpty { NebulaGraph4D(rows: rows, selection: $selection) }
+                        else { Spacer() }
+                    } else { standardGraph }
+                }.frame(minHeight: 250, maxHeight: .infinity)
+                if let commit = selectedCommit {
+                    CommitDetailsView(commit: commit).frame(minHeight: 150, idealHeight: 210, maxHeight: 350)
+                }
+            }
             HStack {
                 Text(L("\(rows.count) コミット")).foregroundStyle(.secondary)
                 Spacer()
@@ -117,9 +103,39 @@ struct GraphLaneView: View {
             do {
                 let repo = repo, count = limit
                 let records = try await Task.detached { try repo.history(limit: count, topological: true) }.value
-                if !Task.isCancelled { rows = GitGraphLayout.rows(records); selection = selection ?? rows.first?.id }
+                if !Task.isCancelled {
+                    rows = GitGraphLayout.rows(records)
+                    if !records.contains(where: { $0.id == selection }) { selection = records.first?.id }
+                }
             } catch { if !Task.isCancelled { self.error = error.localizedDescription } }
             if !Task.isCancelled { loading = false }
+        }
+    }
+    private var standardGraph: some View {
+        GeometryReader { viewport in
+            ScrollView([.vertical, .horizontal]) {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(rows) { row in
+                        Button { selection = row.id } label: {
+                            HStack(spacing: 12) {
+                                GraphLaneView(row: row, columns: columns)
+                                Text(row.commit.shortID).font(.system(.body, design: .monospaced)).foregroundStyle(.secondary).frame(width: 80)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(row.commit.subject).lineLimit(1)
+                                    if !row.commit.decorations.isEmpty { Text(row.commit.decorations).font(.caption).foregroundStyle(.purple).lineLimit(1) }
+                                }.frame(minWidth: 300, maxWidth: .infinity, alignment: .leading)
+                                Text(row.commit.author).foregroundStyle(.secondary).frame(width: 130, alignment: .leading)
+                                Text(row.commit.displayDate).font(.caption).foregroundStyle(.secondary).frame(width: 150, alignment: .trailing)
+                            }.frame(height: 48).padding(.horizontal, 8)
+                                .background(selection == row.id ? Color.accentColor.opacity(0.12) : .clear)
+                                .contentShape(Rectangle())
+                        }.buttonStyle(.plain)
+                            .simultaneousGesture(TapGesture(count: 2).onEnded { navigation.openRevision(repo, row.id, false) })
+                            .accessibilityIdentifier("graphCommit:" + row.id)
+                    }
+                }.frame(width: max(viewport.size.width, CGFloat(columns) * 20 + 760))
+                    .frame(minHeight: viewport.size.height, alignment: .topLeading)
+            }.accessibilityIdentifier("gitGraph")
         }
     }
 }

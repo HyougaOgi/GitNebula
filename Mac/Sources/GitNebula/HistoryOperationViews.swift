@@ -24,10 +24,10 @@ struct CommitOperationView: View {
                 TableColumn(L("コミット"), value: \.subject)
                 TableColumn(L("作成者"), value: \.author).width(min: 110, ideal: 150, max: 200)
                 TableColumn(L("日時"), value: \.displayDate).width(min: 130, ideal: 170, max: 220)
-            }.frame(minHeight: 220).accessibilityIdentifier("commitOperationTable")
+            }.frame(minHeight: 180).accessibilityIdentifier("commitOperationTable")
             if let selected {
-                Text(selected.message).textSelection(.enabled).lineLimit(6)
-                Text(L("対象: \(selected.id)\n実行先: \(model.branch)")).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                CommitDetailsView(commit: selected).frame(minHeight: 150, idealHeight: 220, maxHeight: 280)
+                Text(L("実行先: \(model.branch)")).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                 if selected.parents.count > 1 { Text(L("マージコミットは親の指定が必要なため、この画面からは実行できません。")).foregroundStyle(.orange) }
             } else { Text(L("一覧から実行するコミットを選んでください。")).foregroundStyle(.secondary) }
             if !model.changes.isEmpty { Text(L("実行前に、作業中の変更をコミットまたは Stash してください。")).foregroundStyle(.orange) }

@@ -170,10 +170,11 @@ final class ScreenNavigation: ObservableObject {
     }
     func openRevision(_ repo: GitRepository, reference: String, stash: Bool) {
         guard !busy else { return }
-        append(DetailScreen(title: L("変更ファイル一覧"), subtitle: reference) {
+        let title = stash ? L("変更ファイル一覧") : L("コミット情報")
+        append(DetailScreen(title: title, subtitle: reference) {
             if stash { StashComparisonView(repo: repo, reference: reference) }
             else { CommitReferenceView(repo: repo, reference: reference) }
-        }, title: L("変更ファイル一覧"))
+        }, title: title)
     }
 }
 
