@@ -16,7 +16,7 @@ struct RemoteOperationReport: Sendable {
     }
 }
 extension GitRepository {
-    func transfer(_ action: GitAction, remote name: String, progress: (@Sendable (GitTransferProgress) -> Void)? = nil) throws -> RemoteOperationReport {
+    func transfer(_ action: GitAction, remote name: String, allBranches: Bool = false, progress: (@Sendable (GitTransferProgress) -> Void)? = nil) throws -> RemoteOperationReport {
         let name = try remote(name), branch = try currentBranch(), before = try headRevision()
         let arguments: [String]
         switch action {
@@ -25,7 +25,7 @@ extension GitRepository {
         case .push:
             guard before != nil else { throw failure(L("Push する前に最初のコミットを作成してください。")) }
             arguments = ["push", "--progress", "--set-upstream", name, "HEAD:" + (try remoteBranch(name))]
-        case .fetch: arguments = ["fetch", "--progress", "--prune", name]
+        case .fetch: arguments = ["fetch", "--progress", "--prune", name] + (allBranches ? ["+refs/heads/*:refs/remotes/" + name + "/*"] : [])
         default: throw failure(L("送受信の操作を選択してください。"))
         }
         let result = try GitProcess.runWithOutput(in: path, arguments: arguments, progress: progress)

@@ -13,6 +13,7 @@ struct CommitRecord: Identifiable, Sendable, Equatable {
     var committerEmail = ""
     var commitDate = ""
     var tree = ""
+    var branchNames: [String]? = nil
     var shortID: String { String(id.prefix(8)) }
     var displayDate: String { String(date.prefix(16)).replacingOccurrences(of: "T", with: " ") }
     func matches(_ query: String) -> Bool {
@@ -113,10 +114,20 @@ extension GitRepository {
         var fields = output.components(separatedBy: "\0")
         if fields.last == "" { fields.removeLast() }
         guard fields.count % 12 == 0 else { throw failure(L("コミット履歴を読み取れませんでした。")) }
+        var branchNames: [String: [String]] = [:]
+        if topological {
+            let refs = try run(["for-each-ref", "--format=%(objectname)%00%(refname)%00%(symref)", "refs/heads", "refs/remotes"])
+            for line in refs.components(separatedBy: "\n") {
+                let parts = line.components(separatedBy: "\0")
+                guard parts.count == 3, parts[2].isEmpty else { continue }
+                let prefix = parts[1].hasPrefix("refs/heads/") ? "refs/heads/" : "refs/remotes/"
+                branchNames[parts[0], default: []].append(String(parts[1].dropFirst(prefix.count)))
+            }
+        }
         var records: [CommitRecord] = []
         for i in stride(from: 0, to: fields.count, by: 12) {
             let parents = fields[i + 1].split(separator: " ").map(String.init)
-            records.append(CommitRecord(id: fields[i], parents: parents, author: fields[i + 2], email: fields[i + 3], date: fields[i + 4], decorations: fields[i + 5], subject: fields[i + 6], message: fields[i + 7], committer: fields[i + 8], committerEmail: fields[i + 9], commitDate: fields[i + 10], tree: fields[i + 11]))
+            records.append(CommitRecord(id: fields[i], parents: parents, author: fields[i + 2], email: fields[i + 3], date: fields[i + 4], decorations: fields[i + 5], subject: fields[i + 6], message: fields[i + 7], committer: fields[i + 8], committerEmail: fields[i + 9], commitDate: fields[i + 10], tree: fields[i + 11], branchNames: topological ? branchNames[fields[i]] ?? [] : nil))
         }
         return records
     }

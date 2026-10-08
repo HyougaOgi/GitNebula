@@ -19,6 +19,7 @@ public partial class MainWindow
                 Capture(child);
             }
         }
+        HomeBrand.Foreground = new LinearGradientBrush(new GradientStopCollection { new GradientStop(Color.FromRgb(61, 160, 255), 0), new GradientStop(Color.FromRgb(160, 87, 232), .5), new GradientStop(Color.FromRgb(238, 102, 176), 1) }, new Point(0, 0), new Point(1, 1));
         Capture(this); DrawNebula(); ApplyAppearance();
         IsVisibleChanged += (_, _) => AnimateVisible();
         HomePanel.IsVisibleChanged += (_, _) => AnimateVisible();
@@ -58,11 +59,15 @@ public partial class MainWindow
         foreach (var item in ThemeChoice.Items.OfType<ComboBoxItem>()) item.Content = Localization.Text((string)item.Tag switch { "light" => Localization.Text("ライト"), "dark" => Localization.Text("ダーク"), _ => Localization.Text("システム") });
         foreach (var item in LanguageChoice.Items.OfType<ComboBoxItem>()) item.Content = (string)item.Tag == "en" ? "English" : Localization.Text("日本語");
         if (CommitList.View is GridView grid) { grid.Columns[1].Header = Localization.Text("コミット"); grid.Columns[2].Header = Localization.Text("作成者"); }
+        HistoryCommitDetails.RefreshLanguage(); GraphCommitDetails.RefreshLanguage();
+        foreach (var item in GraphMode.Items.OfType<ComboBoxItem>()) item.Content = (string)item.Tag == "normal" ? Localization.Text("通常") : "4D";
         OtherActions.Items.Clear(); OtherActions.Items.Add(new ComboBoxItem { Content = Localization.Text("機能を選ぶ…"), Tag = "placeholder" });
         foreach (var group in LaunchRequest.MenuGroups) {
             OtherActions.Items.Add(new ComboBoxItem { Content = group.Title, Tag = "placeholder", IsEnabled = false });
             foreach (var name in group.Actions) OtherActions.Items.Add(new ComboBoxItem { Content = LaunchRequest.Actions[name].Title, Tag = name });
         }
+        OtherActions.Items.Add(new ComboBoxItem { Content = Localization.Text("アプリ"), Tag = "placeholder", IsEnabled = false });
+        foreach (var name in new[] { "open", "settings" }) OtherActions.Items.Add(new ComboBoxItem { Content = LaunchRequest.Actions[name].Title, Tag = name });
         OtherActions.SelectedIndex = 0;
         Heading.Text = LaunchRequest.Actions[action].Title; Hint.Text = LaunchRequest.Actions[action].Hint;
         Title = action == "open" ? "GitNebula" : Heading.Text + " — GitNebula";
@@ -94,6 +99,12 @@ public partial class MainWindow
     }
     private void AnimateVisible()
     {
+        if (HomeBrand.Foreground is LinearGradientBrush title) {
+            foreach (var stop in title.GradientStops) {
+                stop.BeginAnimation(GradientStop.ColorProperty, null);
+                if (IsVisible && HomePanel.IsVisible && SystemParameters.ClientAreaAnimation) stop.BeginAnimation(GradientStop.ColorProperty, new ColorAnimation(stop.Color, Color.FromRgb((byte)(stop.Offset < .5 ? 225 : 65), 100, (byte)(stop.Offset < .5 ? 182 : 255)), TimeSpan.FromSeconds(8)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
+            }
+        }
         foreach (var star in Stars.Children.OfType<Ellipse>()) {
             star.BeginAnimation(OpacityProperty, null);
             if (IsVisible && SystemParameters.ClientAreaAnimation) star.BeginAnimation(OpacityProperty, new DoubleAnimation(.12, .7, TimeSpan.FromSeconds(3 + animationRandom.NextDouble() * 9)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, BeginTime = TimeSpan.FromSeconds(animationRandom.NextDouble() * 3) });

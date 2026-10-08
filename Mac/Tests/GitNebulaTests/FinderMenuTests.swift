@@ -11,7 +11,7 @@ final class FinderMenuTests: LocalizedTestCase {
         XCTAssertEqual(GitAction.menuGroups.map(\.title), ["変更", "履歴", "ブランチ", "リモート", "リポジトリ"])
         XCTAssertEqual(Set(GitAction.menuActions), Set(GitAction.allCases.filter { $0 != .open }))
         XCTAssertEqual(Set(GitAction.menuActions).count, GitAction.menuActions.count)
-        let finder = try XCTUnwrap(FinderMenu().makeMenu(paths: ["/repo"], target: self, selector: #selector(launch(_:)))?.items.first?.submenu)
+        let finder = try XCTUnwrap(FinderMenu().makeMenu(paths: ["/repo"], target: self, selector: #selector(launch(_:)))?.items.compactMap(\.submenu).first)
         XCTAssertEqual(finder.items.filter(\.isSeparatorItem).count, 4)
         let application = ApplicationDelegate().makeFunctionMenu()
         XCTAssertEqual(application.items.compactMap { ($0.representedObject as? String).flatMap(GitAction.init(rawValue:)) }, GitAction.menuActions)
@@ -19,7 +19,7 @@ final class FinderMenuTests: LocalizedTestCase {
 
     private func items(_ menu: FinderMenu, paths: [String], cloneParent: String? = nil, cloneIntoSelection: String? = nil) throws -> [NSMenuItem] {
         let root = try XCTUnwrap(menu.makeMenu(paths: paths, cloneParent: cloneParent, cloneIntoSelection: cloneIntoSelection, target: self, selector: #selector(launch(_:))))
-        return try XCTUnwrap(root.items.first?.submenu).items.filter { $0.action != nil }
+        return try XCTUnwrap(root.items.compactMap(\.submenu).first).items.filter { $0.action != nil }
     }
 
     private func finderCopy(_ item: NSMenuItem) -> NSMenuItem {
@@ -29,6 +29,15 @@ final class FinderMenuTests: LocalizedTestCase {
         return sender
     }
 
+    func testRootClickOpensActionChooserAndKeepsEarlierFolder() throws {
+        let menus = FinderMenu()
+        let first = try XCTUnwrap(menus.makeMenu(paths: ["/first repo/file"], target: self, selector: #selector(launch(_:)))?.items.first)
+        XCTAssertNil(first.submenu); XCTAssertNotNil(first.action)
+        _ = menus.makeMenu(paths: ["/other repo"], target: self, selector: #selector(launch(_:)))
+        let request = try LaunchRequest.parse(menus.request(for: finderCopy(first)).url())
+        XCTAssertEqual(request.action, .workspace); XCTAssertTrue(request.showsActionMenu)
+        XCTAssertEqual(request.paths, ["/first repo/file"])
+    }
     func testEveryActionSurvivesCopiedMenuSenderAndURLTransport() throws {
         let menu = FinderMenu()
         let paths = ["/repo/星雲 #?&%.txt", "/repo/space folder"]

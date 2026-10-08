@@ -26,7 +26,7 @@ Right-click a file or folder, choose **GitNebula → Commit / Diff / Log / Pull 
 
 GitNebula is in active development. Native build and integration-test commands are included for every platform. Release signing requires the maintainer's own signing identity; unsigned development packages are not notarized or trusted release artifacts.
 
-macOS includes a side-by-side diff viewer with line numbers, aligned changes and synchronized scrolling, plus a searchable commit table with file-level comparisons. Stash and Tag windows also preview changes, and branch/remote operations have dedicated forms and lists. It additionally supports Init, remote/identity settings, staging, ignore rules, history editing, Blame, patches, Worktree, and Submodule operations. See the [feature matrix and remaining TortoiseGit differences](shared/FEATURES.md) for exact platform coverage.
+All three platforms include full commit information with field/message/all copy, searchable history, 2D and spatial 4D graphs, and aligned file comparisons with line numbers and synchronized scrolling. Stash and Tag windows also preview changes, and branch/remote operations have dedicated forms and lists. Each platform also supports Init, remote/identity settings, Stage/Unstage/Ignore/Discard, history editing, Blame, patches, Worktree and Submodule operations. See the [feature matrix and remaining TortoiseGit differences](shared/FEATURES.md) for exact platform coverage.
 
 ## Getting started
 
@@ -39,7 +39,7 @@ bash Mac/install.sh
 # swift run --package-path Mac
 
 # Debian / Ubuntu Linux
-sudo apt-get install python3-gi gir1.2-gtk-4.0 git
+sudo apt-get install python3-gi python3-cairo python3-gi-cairo gir1.2-gtk-4.0 libsecret-tools git
 /usr/bin/python3 Linux/main.py
 ```
 
@@ -48,7 +48,7 @@ sudo apt-get install python3-gi gir1.2-gtk-4.0 git
 dotnet run --project Windows/GitNebula.csproj
 ```
 
-Configure your Git name and email before committing. Network operations use your existing Git credential helper or SSH agent. GitNebula does not store passwords or change global Git configuration. Terminal prompts are disabled; configure authentication outside the application before using private remotes.
+Configure your Git name and email before committing. Network operations use your existing Git credential helper or SSH agent. Configure SSH keys and passphrases in Settings, or use the existing SSH agent/configuration. Passphrases are held in macOS Keychain, Windows Credential Manager or Linux Secret Service; HTTPS uses Git's credential helper. GitNebula does not change global Git configuration.
 
 See the platform guides for installation, file-manager integration, and packaging:
 
@@ -67,13 +67,15 @@ Install the file-manager integration from your [platform guide](#getting-started
 
 **差分一覧** (macOS; **差分を確認** on other platforms) and **履歴を表示** open their own views. On macOS, lists contain no inline comparison: open a file to see its read-only comparison, then use **戻る** to return with selection, scroll and drafts preserved. **Pull / Push / Fetch** show the repository, current branch and remote, then run when you click the action button. **ブランチを切り替え** only asks for the target branch. **Clone** starts directly at its source/destination form. Clone creates a repository-named child directory inside the chosen parent, which may already contain files. The form only asks for the source and parent directory; the repository name is automatic, and the final destination is shown for confirmation. Finder offers **この階層にリポジトリを複製（Clone）** for the containing directory and **選択フォルダ内に Clone** for an intentionally selected folder; right-clicking a row in list view does not silently use that row as the parent. An occupied repository destination is rejected without overwriting it.
 
-Commit and diff are scoped to the selected files or folder descendants. History and remote operations apply to the repository. Finder and Linux accept multiple selections within one repository; Explorer uses one selected file/folder per dialog. A folder selection includes its descendants. On macOS, **リポジトリの管理** opens dedicated working-file, branch, conflict and identity screens; Windows also opens dedicated management screens; Linux retains **詳細操作**.
+Commit and diff are scoped to the selected files or folder descendants. History and remote operations apply to the repository. Finder and Linux accept multiple selections within one repository; Explorer uses one selected file/folder per dialog. A folder selection includes its descendants. **リポジトリの管理** and the operation chooser open dedicated working-file, branch, conflict and identity screens on every platform.
 
-macOS normally starts in the menu bar, with no Dock icon or window. Its resident menu contains welcome, detailed settings, startup options and Quit. Startup options control login launch and opening welcome at startup (off by default). Open **ようこそを開く**, select a repository and choose **このリポジトリで操作する**, or use the Finder context menu for Git operations. Windows normally shows **GitNebula へようこそ** and provides its tray menu and **機能を選ぶ…**. Closing hides the window by default, and Quit is explicit. Linux shows its operation chooser. Type/paste a path and press Enter, or use the folder picker. macOS navigates into dedicated screens with a Back button; **その他の機能** is a launcher for advanced tools. UI labels use Japanese descriptions alongside standard Git terms. See [the interaction specification](shared/DESIGN.md).
+Normal startup keeps GitNebula in the macOS menu bar or the Windows/Linux tray. Clicking its icon opens a simple nebula screen with Settings. Repository operations are opened from a file-manager context menu; the direct GitNebula entry opens the repository operation chooser, and dedicated menu entries open the selected function. Startup options control automatic login launch and opening the app screen at startup (off by default). Linux requires a StatusNotifier-compatible tray host and shows Home when no host is available. Each repository retains separate work, History and Graph windows with their own sizes and drafts. Reopening a function reuses its matching window; resizing History preserves the Graph size and 4D camera. Back follows the actual previous screen; a direct repository operation returns to its chooser. Theme, opacity, language and SSH settings are available on all platforms. See [the interaction specification](shared/DESIGN.md).
+
+4D graph labels use branch names, excluding tags and symbolic HEAD aliases. A merged log whose original branch ref was deleted uses the nearest surviving branch containing its tip. A log with no reachable branch ref shows its full commit ID. Spatial positions, merge edges, log sizes and the time dimension remain based on the commit graph.
 
 Pull accepts fast-forward updates only. Pull and Push respect an existing upstream branch even when its name differs from the local branch; the configured remote is preselected. Branch deletion uses Git's merged-branch check. Branch switching and merging require a clean working tree. Git hooks run normally.
 
-When a merge conflicts, select a conflicted file and edit its resolution, or resolve it in another editor and mark it resolved. Completing a merge includes **all staged changes**. Aborting a merge discards the current resolution work after confirmation. macOS and Windows also support continuing or aborting Rebase, Cherry-pick and Revert; Linux supports merge completion only.
+When a merge conflicts, select a conflicted file and edit its resolution, or resolve it in another editor and mark it resolved. Completing a merge includes **all staged changes**. Aborting a merge discards the current resolution work after confirmation. All platforms support continuing or aborting Rebase, Cherry-pick and Revert.
 
 If a renamed file's original path has been recreated, explicitly select that path too or move it aside before committing the rename. This prevents unselected replacement content from being included. A failed commit may leave selected files staged.
 
@@ -86,7 +88,7 @@ Untracked previews are limited to 1 MiB. Binary files are identified without ren
 python3 -m unittest discover -s tests -v
 
 # Linux GUI integration test (requires GTK 4 and xvfb)
-xvfb-run -a /usr/bin/python3 tests/gtk_smoke.py
+dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/gtk_smoke.py
 
 # macOS native build and backend tests
 swift test --package-path Mac

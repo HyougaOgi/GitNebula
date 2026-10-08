@@ -17,19 +17,23 @@ struct CommitOperationView: View {
             && model.sequence == nil && model.conflicts.isEmpty && !model.busy
     }
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 8) {
             TextField(L("コミットを検索（メッセージ・作成者・ID）"), text: $query).textFieldStyle(.roundedBorder)
+            CommitBrowserPanes {
             Table(filtered, selection: $selection) {
                 TableColumn("ID") { Text($0.id).font(.system(.caption, design: .monospaced)).textSelection(.enabled) }.width(min: 300, ideal: 340, max: 520)
                 TableColumn(L("コミット"), value: \.subject)
                 TableColumn(L("作成者"), value: \.author).width(min: 110, ideal: 150, max: 200)
                 TableColumn(L("日時"), value: \.displayDate).width(min: 130, ideal: 170, max: 220)
-            }.frame(minHeight: 180).accessibilityIdentifier("commitOperationTable")
+            }.accessibilityIdentifier("commitOperationTable")
+            } detail: {
+                if let selected { CommitDetailsView(commit: selected) }
+                else { Text(L("一覧から実行するコミットを選んでください。")).foregroundStyle(.secondary) }
+            }
             if let selected {
-                CommitDetailsView(commit: selected).frame(minHeight: 150, idealHeight: 220, maxHeight: 280)
                 Text(L("実行先: \(model.branch)")).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                 if selected.parents.count > 1 { Text(L("マージコミットは親の指定が必要なため、この画面からは実行できません。")).foregroundStyle(.orange) }
-            } else { Text(L("一覧から実行するコミットを選んでください。")).foregroundStyle(.secondary) }
+            }
             if !model.changes.isEmpty { Text(L("実行前に、作業中の変更をコミットまたは Stash してください。")).foregroundStyle(.orange) }
             if let error { Text(error).foregroundStyle(.orange).textSelection(.enabled) }
             HStack {
@@ -118,6 +122,7 @@ struct GitOperationButton: NSViewRepresentable {
     let identifier: String
     let enabled: Bool
     let action: () -> Void
+    var keyEquivalent = ""
     final class Coordinator: NSObject {
         var action: () -> Void
         init(action: @escaping () -> Void) { self.action = action }
@@ -132,6 +137,7 @@ struct GitOperationButton: NSViewRepresentable {
         return button
     }
     func updateNSView(_ button: NSButton, context: Context) {
-        button.title = title; button.isEnabled = enabled; context.coordinator.action = action
+        button.title = title; button.isEnabled = enabled && context.environment.isEnabled; context.coordinator.action = action
+        button.keyEquivalent = keyEquivalent; button.keyEquivalentModifierMask = [.command]
     }
 }

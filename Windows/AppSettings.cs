@@ -8,6 +8,7 @@ public sealed class AppSettings
     public static AppSettings Current { get; } = Load();
     public string Theme { get; set; } = "system";
     public string Language { get; set; } = DefaultLanguage;
+    public string GraphMode { get; set; } = "normal";
     private static string DefaultLanguage => CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "ja" ? "ja" : "en";
     public double Transparency { get; set; }
     public bool ShowHomeOnLaunch { get; set; }

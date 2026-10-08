@@ -3,6 +3,13 @@ import SwiftUI
 import AppKit
 @testable import GitNebula
 
+@MainActor private final class CommitPreviewBackground: NSView {
+    override var isFlipped: Bool { true }
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.white.setFill(); NSBezierPath(rect: dirtyRect).fill()
+    }
+}
+
 @MainActor final class CommitDetailsTests: LocalizedTestCase {
     private func fixture() throws -> (URL, GitRepository) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("commit-details-" + UUID().uuidString).resolvingSymlinksInPath()
@@ -98,6 +105,83 @@ import AppKit
         for parent in merge.parents { XCTAssertTrue(merge.detailsText.contains(parent)); XCTAssertEqual(parent.count, 40) }
         XCTAssertTrue(merge.detailsText.contains("tag: details-test"))
     }
+    func testNativePanelShowsFullTextAndEveryButtonCopiesCurrentSelection() throws {
+        let (_, repo) = try fixture(), first = try XCTUnwrap(repo.history().first)
+        var copied: String?
+        let copy: (String) -> Bool = { copied = $0; return true }
+        let panel = CommitDetailsPanel(commit: first, copy: copy)
+        func children(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + children($0) } }
+        func button(_ id: String) throws -> NSButton { try XCTUnwrap(children(panel).compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == id }) }
+        XCTAssertEqual(panel.hashField.stringValue, try repo.revision("HEAD"))
+        XCTAssertEqual(panel.hashField.maximumNumberOfLines, 0)
+        XCTAssertEqual(panel.messageView.string, first.message)
+        XCTAssertTrue(panel.messageView.isSelectable); XCTAssertFalse(panel.messageView.isEditable)
+        XCTAssertEqual(panel.messageView.font?.pointSize, 15)
+        for field in first.detailFields {
+            let prefix = ["id", "message"].contains(field.id) ? "copyCommit:" : "copyCommitField:"
+            try button(prefix + field.id).performClick(nil)
+            XCTAssertEqual(copied, field.value)
+        }
+        try button("copyCommit:all").performClick(nil); XCTAssertEqual(copied, first.detailsText)
+        _ = try repo.run(["commit", "--allow-empty", "-m", "next\n\nnew body"])
+        let second = try XCTUnwrap(repo.history(limit: 1).first)
+        panel.update(commit: second, copy: copy, enabled: true)
+        XCTAssertEqual(panel.hashField.stringValue, second.id); XCTAssertEqual(panel.messageView.string, second.message)
+        for (field, expected) in [("id", second.id), ("message", second.message), ("all", second.detailsText)] {
+            try button("copyCommit:" + field).performClick(nil); XCTAssertEqual(copied, expected)
+        }
+        panel.update(commit: second, copy: { _ in false }, enabled: true)
+        try button("copyCommit:message").performClick(nil)
+        XCTAssertTrue(children(panel).contains { $0.accessibilityIdentifier() == "commitCopyError" })
+        if let directory = ProcessInfo.processInfo.environment["GITNEBULA_PREVIEW_DIR"] {
+            panel.update(commit: first, copy: copy, enabled: true)
+            let preview = CommitPreviewBackground(frame: NSRect(x: 0, y: 0, width: 1000, height: 480))
+            preview.appearance = NSAppearance(named: .aqua)
+            panel.frame = preview.bounds; preview.addSubview(panel)
+            preview.layoutSubtreeIfNeeded()
+            XCTAssertGreaterThan(panel.hashField.frame.width, 900)
+            XCTAssertGreaterThan(panel.messageView.enclosingScrollView?.frame.height ?? 0, 130)
+            if let bitmap = preview.bitmapImageRepForCachingDisplay(in: preview.bounds) {
+                preview.cacheDisplay(in: preview.bounds, to: bitmap)
+                if let data = bitmap.representation(using: .png, properties: [:]) {
+                    try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+                    try data.write(to: URL(fileURLWithPath: directory).appendingPathComponent("commit-details.png"))
+                }
+            }
+        }
+    }
+    func testEveryFieldRemainsReachableInShortWindowAndAfterResize() throws {
+        let message = (1...80).map { "本文 \($0) — 長いコミットメッセージを通常のウィンドウで読む" }.joined(separator: "\n")
+        let record = CommitRecord(id: String(repeating: "a", count: 64), parents: [String(repeating: "b", count: 64)], author: "作者", email: "author@example.invalid", date: "2026-10-09T00:00:00+09:00", decorations: "HEAD -> main", subject: "件名", message: message, committer: "Committer", committerEmail: "committer@example.invalid", commitDate: "2026-10-09T00:00:00+09:00", tree: String(repeating: "c", count: 64))
+        let panel = CommitDetailsPanel(commit: record, copy: { _ in true })
+        let background = CommitPreviewBackground(frame: NSRect(x: 0, y: 0, width: 850, height: 260))
+        background.appearance = NSAppearance(named: .aqua); background.addSubview(panel)
+        func descendants(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + descendants($0) } }
+        let scroll = try XCTUnwrap(descendants(panel).compactMap { $0 as? NSScrollView }.first { $0.accessibilityIdentifier() == "commitDetailsScroll" })
+        let tree = try XCTUnwrap(descendants(panel).first { $0.accessibilityIdentifier() == "commitField:tree" })
+        for size in [NSSize(width: 850, height: 260), NSSize(width: 1050, height: 480), NSSize(width: 850, height: 210)] {
+            background.setFrameSize(size); panel.frame = background.bounds
+            for _ in 0..<4 { background.layoutSubtreeIfNeeded() }
+            let document = try XCTUnwrap(scroll.documentView)
+            XCTAssertEqual(panel.hashField.stringValue, record.id)
+            XCTAssertEqual(panel.messageView.string, message)
+            XCTAssertGreaterThan(scroll.frame.height, 70)
+            XCTAssertGreaterThan(document.frame.height, scroll.contentSize.height)
+            XCTAssertLessThanOrEqual(document.frame.width, scroll.contentSize.width + 1)
+            scroll.contentView.scroll(to: NSPoint(x: 0, y: max(0, document.bounds.height - scroll.contentSize.height)))
+            scroll.reflectScrolledClipView(scroll.contentView)
+            let frame = tree.convert(tree.bounds, to: scroll.contentView)
+            XCTAssertTrue(scroll.contentView.bounds.intersects(frame), "The last field must be reachable by scrolling at \(size)")
+            XCTAssertLessThanOrEqual(scroll.frame.maxY, panel.bounds.height)
+        }
+        if let directory = ProcessInfo.processInfo.environment["GITNEBULA_PREVIEW_DIR"], let bitmap = background.bitmapImageRepForCachingDisplay(in: background.bounds) {
+            background.cacheDisplay(in: background.bounds, to: bitmap)
+            if let data = bitmap.representation(using: .png, properties: [:]) {
+                try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+                try data.write(to: URL(fileURLWithPath: directory).appendingPathComponent("commit-details-small.png"))
+            }
+        }
+    }
     func testClipboardKeepsFullIDsAndMultilineMessageSeparateFromLabels() throws {
         let (_, repo) = try fixture(), record = try XCTUnwrap(repo.history().first)
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("CommitDetailsTests." + UUID().uuidString))
@@ -121,6 +205,51 @@ import AppKit
         XCTAssertTrue(copied.contains("メッセージ:\n" + record.message))
         XCTAssertTrue(copied.contains("作成者のメール:\nauthor@example.invalid"))
     }
+    func testRootLayoutAndRetainedRoutesShrinkToNormalWindow() throws {
+        let model = Workspace(), navigation = ScreenNavigation()
+        model.launch(LaunchRequest(action: .open, paths: []))
+        let outer = NSHostingView(rootView: ContentView(model: model, navigation: navigation))
+        XCTAssertLessThanOrEqual(outer.fittingSize.width, 850, "The outer host must not retain the old 1050 px minimum")
+        XCTAssertLessThanOrEqual(outer.fittingSize.height, 600, "The outer host must not retain the old 720 px minimum")
+        navigation.installRoot(model, close: nil)
+        let host = RetainedScreenHost()
+        for size in [NSSize(width: 1100, height: 900), NSSize(width: 850, height: 600), NSSize(width: 1000, height: 700), NSSize(width: 850, height: 600)] {
+            host.setFrameSize(size)
+            host.display(try XCTUnwrap(navigation.current))
+            host.layoutSubtreeIfNeeded()
+            XCTAssertEqual(host.active?.frame, host.bounds, "The retained route must follow both shrinking and growing")
+        }
+    }
+    func testWholeHistoryAndGraphKeepInspectorInsideNormalWindowAfterResize() async throws {
+        try await requireSwiftUIDisplay()
+        let (_, repo) = try fixture(), model = Workspace(), navigation = ScreenNavigation()
+        model.launch(LaunchRequest(action: .log, paths: [repo.path]))
+        let root = NSHostingView(rootView: ContentView(model: model, navigation: navigation))
+        root.sizingOptions = []
+        let screen = window(root)
+        defer { screen.close() }
+        navigation.installRoot(model, close: nil)
+        func descendants(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + descendants($0) } }
+        for action in [GitAction.log, .graph] {
+            if action != .log { navigation.openAction(action) }
+            try await wait { descendants(root).contains { $0 is CommitDetailsPanel } }
+            for size in [NSSize(width: 1100, height: 900), NSSize(width: 850, height: 600), NSSize(width: 1000, height: 700), NSSize(width: 850, height: 600)] {
+                screen.setContentSize(size)
+                for _ in 0..<4 { root.layoutSubtreeIfNeeded(); try await Task.sleep(nanoseconds: 30_000_000) }
+                let panel = try XCTUnwrap(descendants(root).compactMap { $0 as? CommitDetailsPanel }.first)
+                let frame = panel.convert(panel.bounds, to: root)
+                XCTAssertGreaterThanOrEqual(frame.minX, -1); XCTAssertGreaterThanOrEqual(frame.minY, -1)
+                XCTAssertLessThanOrEqual(frame.maxX, root.bounds.width + 1); XCTAssertLessThanOrEqual(frame.maxY, root.bounds.height + 1)
+                let scroll = try XCTUnwrap(descendants(panel).compactMap { $0 as? NSScrollView }.first { $0.accessibilityIdentifier() == "commitDetailsScroll" })
+                XCTAssertGreaterThan(scroll.contentSize.height, 40, "The window chrome and list must leave room to read the body")
+                let document = try XCTUnwrap(scroll.documentView)
+                scroll.contentView.scroll(to: NSPoint(x: 0, y: max(0, document.bounds.height - scroll.contentSize.height)))
+                scroll.reflectScrolledClipView(scroll.contentView)
+                let tree = try XCTUnwrap(descendants(panel).first { $0.accessibilityIdentifier() == "commitField:tree" })
+                XCTAssertTrue(scroll.contentView.bounds.intersects(tree.convert(tree.bounds, to: scroll.contentView)))
+            }
+        }
+    }
     func testCopyButtonsCopyOnlyTheirFieldOrAllAndFollowSelection() async throws {
         try await requireSwiftUIDisplay()
         let (_, repo) = try fixture(), first = try XCTUnwrap(repo.history().first)
@@ -134,7 +263,8 @@ import AppKit
         let window = window(host); defer { window.close() }
         try await wait { self.value(host, "commitField:id") == first.id }
         for field in first.detailFields {
-            let button = try XCTUnwrap(element(host, "copyCommitField:" + field.id))
+            let prefix = ["id", "message"].contains(field.id) ? "copyCommit:" : "copyCommitField:"
+            let button = try XCTUnwrap(element(host, prefix + field.id))
             XCTAssertTrue(press(button))
             try await wait { pasteboard.string(forType: .string) == field.value }
         }

@@ -11,6 +11,10 @@ public partial class MainWindow : Window
     private readonly HashSet<string> selected = [];
     private bool busy;
     public bool IsBusy => busy;
+    internal string WindowPurpose { get; set; } = "workspace";
+    internal Func<LaunchRequest, Task>? RouteRequest { get; set; }
+    internal static string PurposeFor(string action) => action is "log" or "graph" ? action : "workspace";
+    internal bool CanReuseLauncher => RepositoryDirectory == null && action == "open" && !busy && routeHistory.Count == 0;
     public string? RepositoryDirectory {
         get {
             if (repository != null) return repository.Path;
@@ -32,17 +36,24 @@ public partial class MainWindow : Window
     {
         initialRequestHandled = initialRequest == null || initialRequest.Action == "open" && initialRequest.Paths.Length == 0;
         request = initialRequest ?? new("open", []);
+        WindowPurpose = PurposeFor(request.Action);
         InitializeComponent();
         OtherActions.Items.Add(new ComboBoxItem { Content = Localization.Text("機能を選ぶ…"), Tag = "placeholder" });
         foreach (var group in LaunchRequest.MenuGroups)
         {
+            RepositoryActions.Children.Add(new TextBlock { Text = group.Title, FontWeight = FontWeights.SemiBold, FontSize = 16, Margin = new Thickness(4, 12, 4, 4) });
+            var buttons = new WrapPanel(); RepositoryActions.Children.Add(buttons);
             OtherActions.Items.Add(new ComboBoxItem { Content = group.Title, Tag = "placeholder", IsEnabled = false });
-            foreach (var name in group.Actions)
+            foreach (var name in group.Actions) {
                 OtherActions.Items.Add(new ComboBoxItem { Content = LaunchRequest.Actions[name].Title, Tag = name });
+                var button = new Button { Content = LaunchRequest.Actions[name].Title, Tag = name }; button.Click += Navigate_Click; buttons.Children.Add(button);
+            }
         }
         OtherActions.Items.Add(new ComboBoxItem { Content = Localization.Text("アプリ"), Tag = "placeholder", IsEnabled = false });
         foreach (var name in new[] { "open", "settings" }) OtherActions.Items.Add(new ComboBoxItem { Content = LaunchRequest.Actions[name].Title, Tag = name });
         initialized = true; OtherActions.SelectedIndex = 0; SetAction("open"); InitializeAppearance();
+        Graph4D.SelectCommit = record => { GraphCommitDetails.SetRecord(record); _ = GraphFiles.SetCommit(Repo, record); if (!busy) _ = Act(async () => GraphDetails.Text = await Repo.ShowCommit(record.Id)); };
+        GraphMode.SelectedIndex = AppSettings.Current.GraphMode == "4d" ? 1 : 0;
         Closing += (_, e) => {
             if (Application.Current is App exiting && exiting.IsExiting) return;
             if (Application.Current is App app && app.ResidentEnabled && (AppSettings.Current.KeepRunning || app.Windows.OfType<MainWindow>().Any(w => w != this && w.IsVisible))) { e.Cancel = true; Hide(); }
@@ -54,7 +65,7 @@ public partial class MainWindow : Window
             initialRequestHandled = true;
             await Act(async () => {
                 request = initialRequest ?? LaunchRequest.Parse(Environment.GetCommandLineArgs().Skip(1).ToArray()); SetAction(request.Action);
-                if (request.Paths.Length > 0 && action != "clone") await OpenPath(request.Paths[0]);
+                if (request.Paths.Length > 0 && action is not ("clone" or "init")) await OpenPath(request.Paths[0]);
             });
         };
     }
@@ -62,11 +73,10 @@ public partial class MainWindow : Window
     private void SetAction(string name)
     {
         action = name;
+        BuildAdvancedView();
         commitCompleted = false;
         Heading.Text = LaunchRequest.Actions[name].Title; Hint.Text = LaunchRequest.Actions[name].Hint;
         Title = name == "open" ? "GitNebula" : Heading.Text + " — GitNebula";
-        Width = 1050;
-        Height = 820;
         if (name == "clone" && string.IsNullOrEmpty(CloneParent.Text))
             CloneParent.Text = LaunchRequest.DirectoryFor(request.Paths.FirstOrDefault() ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
         Status.Text = Localization.Text("準備完了");
@@ -86,13 +96,19 @@ public partial class MainWindow : Window
         var ready = repository != null && !busy;
         var hasConflicts = sequence != null || ConflictChoice.Items.Count > 0;
         HomePanel.Visibility = Show(action == "open");
-        Heading.Visibility = Hint.Visibility = StatusPanel.Visibility = HomeButton.Visibility = Show(action != "open");
+        RepositoryActionsPanel.Visibility = Show(action == "menu");
+        InitPanel.Visibility = Show(action == "init");
+        foreach (var button in RepositoryActions.Children.OfType<WrapPanel>().SelectMany(p => p.Children.OfType<Button>())) button.IsEnabled = !busy && (repository != null || (string)button.Tag is "clone" or "init");
+        Heading.Visibility = StatusPanel.Visibility = HomeButton.Visibility = Show(action != "open");
+        Hint.Visibility = Show(action is not ("open" or "log" or "graph" or "cherry-pick" or "revert"));
         ManagementPanel.Visibility = Show(action == "workspace" && repository != null);
         StashPanel.Visibility = Show(action == "stash" && repository != null);
         TagsPanel.Visibility = Show(action == "tags" && repository != null);
         RemoteSettingsPanel.Visibility = Show(action == "remotes" && repository != null);
         IdentityPanel.Visibility = Show(action == "identity" && repository != null);
         SettingsPanel.Visibility = Show(action == "settings");
+        ToolsPanel.Visibility = Show(AdvancedActions.Contains(action) && repository != null);
+        ToolsPanel.IsEnabled = ready;
         RemotePanel.Visibility = Show((action is "pull" or "push" or "fetch") && repository != null);
         TaskPanel.Visibility = Show(action == "clone" || repository != null && (action is "pull" or "push" or "fetch" or "switch" or "branches" or "merge" or "rebase"));
         BranchPanel.Visibility = Show((action is "switch" or "branches" or "merge" or "rebase") && repository != null);
@@ -100,11 +116,13 @@ public partial class MainWindow : Window
         AdvancedBranches.IsEnabled = ready && !hasConflicts;
         BranchNotice.Text = hasConflicts ? Localization.Text("進行中の操作を完了または中止してください。") : allChanges.Count > 0 ? Localization.Text("切り替え・Merge・Rebase の前に、変更をコミットまたは Stash してください。") : Localization.Text("操作するブランチを選んでください。");
         SwitchButton.Visibility = Show(action is "switch" or "branches");
+        FetchBranchesButton.Visibility = Show(action is "switch" or "branches"); FetchBranchesButton.IsEnabled = ready && RemoteChoice.Items.Count > 0;
         IntegrateButton.Visibility = Show(action is "merge" or "rebase");
         IntegrateButton.Content = action == "rebase" ? Localization.Format($"{currentBranch} を {Branch} の上に Rebase") : Localization.Format($"{Branch} を {currentBranch} に Merge");
         ClonePanel.Visibility = Show(action == "clone");
         FilePanel.Visibility = Show((action is "commit" or "diff" or "files") && repository != null);
         var historyAction = action is "log" or "cherry-pick" or "revert";
+        StatusPanel.MaxHeight = historyAction || action == "graph" ? 24 : 110;
         HistoryPanel.Visibility = Show(historyAction && repository != null);
         History.Visibility = Show(historyAction && repository != null);
         CherryPickButton.Visibility = Show(action is "log" or "cherry-pick");
@@ -127,12 +145,13 @@ public partial class MainWindow : Window
         var commit = CommitList.SelectedItem as CommitRecord;
         CherryPickButton.IsEnabled = RevertButton.IsEnabled = ready && commit != null && commit.Parents.Length <= 1 && !hasConflicts && allChanges.Count == 0;
         HistoryNotice.Text = allChanges.Count > 0 ? Localization.Text("実行する前に作業中の変更をコミットまたは Stash してください。") : sequence != null ? Localization.Text("進行中の操作を完了または中止してください。") : commit?.Parents.Length > 1 ? Localization.Text("マージコミットは親の指定が必要なため、この画面からは実行できません。") : Localization.Text("コミットを選び、変更の取り込みまたは取り消しを実行できます。");
+        HistoryNoticePanel.Visibility = Show(allChanges.Count > 0 || sequence != null || commit?.Parents.Length > 1);
         var stash = StashList.SelectedItem as StashEntry;
         SaveStashButton.IsEnabled = ready && hasHead && !hasConflicts && allChanges.Any(c => IncludeUntracked.IsChecked == true || c.Code != "??");
         ApplyStashButton.IsEnabled = PopStashButton.IsEnabled = ready && stash != null && !hasConflicts && allChanges.Count == 0;
         DropStashButton.IsEnabled = ready && stash != null && !hasConflicts;
         StashNotice.Text = !hasHead ? Localization.Text("Stash を使う前に最初のコミットを作成してください。") : hasConflicts ? Localization.Text("競合を解決してから Stash を使ってください。") : allChanges.Count > 0 ? Localization.Text("現在の変更を退避できます。適用・取り出しの前に、変更をコミットまたは退避してください。") : Localization.Text("退避データを選ぶと、内容を確認して作業を再開できます。");
-        Progress.Visibility = Show(busy);
+        Progress.Visibility = ProgressLabel.Visibility = Show(busy || transferProgress?.Completed == true && action is "pull" or "push" or "fetch" or "clone" or "switch");
         OpenButton.Visibility = RefreshButton.Visibility = Location.Visibility = Show(action is not ("open" or "clone" or "settings"));
         PathPanel.Visibility = Show(action is not ("open" or "clone" or "settings"));
         BackButton.Visibility = Show(routeHistory.Count > 0); BackButton.IsEnabled = !busy;
@@ -174,8 +193,10 @@ public partial class MainWindow : Window
     }
     private async void Execute_Click(object sender, RoutedEventArgs e) => await Act(async () => {
         transferReport = null;
-        transferReport = await Repo.Transfer(action, Remote);
+        UpdateTransferProgress(TransferProgress.Waiting);
+        transferReport = await Repo.Transfer(action, Remote, ReportTransferProgress);
         await RefreshAfterOperation();
+        UpdateTransferProgress(TransferProgress.Complete);
         RemoteResult.Text = transferReport.Summary + "\nHEAD: " + transferReport.Before?[..8] + " → " + transferReport.After?[..8];
         RemoteOutput.Text = transferReport.Output;
     }, result: () => transferReport!.Summary);
@@ -198,9 +219,11 @@ public partial class MainWindow : Window
     private async Task Act(Func<Task> work, string success = "準備完了", Func<string>? result = null)
     {
         if (busy) return;
+        transferProgress = null; Progress.IsIndeterminate = true; ProgressLabel.Text = "";
         busy = true; Controls(); Workspace.IsEnabled = false; Status.Foreground = new SolidColorBrush(Color.FromRgb(165, 177, 207)); Status.Text = Localization.Text("処理中…");
         try { await work(); Status.Text = result?.Invoke() ?? Localization.Text(success); }
         catch (Exception error) {
+            transferProgress = null; ProgressLabel.Text = "";
             var refreshError = "";
             if (repository != null) { try { await Refresh(); } catch (Exception updateError) { refreshError = Localization.Text("\n画面の更新にも失敗しました: ") + updateError.Message; } }
             Status.Text = error.Message + refreshError; Status.Foreground = new SolidColorBrush(Color.FromRgb(255, 190, 144));
@@ -227,6 +250,7 @@ public partial class MainWindow : Window
         if (busy) return;
         await Act(async () => {
             var path = LaunchRequest.InputPath(input);
+            if (action == "init") { RepositoryPath.Text = path; request = new("init", [path]); return; }
             if (repository != null) drafts[repository.Path] = Message.Text;
             RepositoryPath.Text = path;
             request = new(action, [path]); initialSelection = true; selected.Clear(); Message.Clear(); repository = null; merging = false; sequence = null; hasHead = false;
@@ -246,8 +270,9 @@ public partial class MainWindow : Window
         }
         var changes = await candidate.Changes(); var branch = await candidate.Branch();
         repository = candidate; Render(changes, branch); await RefreshDetails();
+        EnsureRepositoryReturn();
         AppSettings.Current.Remember(candidate.Path);
-        if (visibleChanges.Count > 0 && action is "commit" or "diff" or "files") DiffView.Text = await repository.Diff(visibleChanges[0].Path);
+        if (visibleChanges.Count > 0 && action is "commit" or "diff" or "files") { DiffView.Text = await repository.Diff(visibleChanges[0].Path); WorkingComparison.SetDocument(await repository.FileComparison(visibleChanges[0].Path)); }
     }
     private async Task Refresh()
     {
@@ -262,15 +287,15 @@ public partial class MainWindow : Window
         var remote = RemoteChoice.SelectedItem as string;
         var remotes = await repository.Remotes(); RemoteChoice.ItemsSource = remotes;
         RemoteChoice.SelectedItem = remotes.Contains(remote) ? remote : await repository.PreferredRemote();
-        var branches = await repository.Branches(); var previous = Branch;
-        BranchChoice.ItemsSource = branches; BranchChoice.SelectedItem = branches.Contains(previous) ? previous : branches.FirstOrDefault(b => b != currentBranch) ?? currentBranch;
+        var branches = await repository.BranchRecords(action is "switch" or "branches"); var previous = Branch;
+        BranchChoice.ItemsSource = branches; BranchChoice.SelectedItem = branches.FirstOrDefault(b => b.Id == previous) ?? branches.FirstOrDefault(b => b.Id != currentBranch) ?? branches.FirstOrDefault();
         ConflictChoice.ItemsSource = await repository.Conflicts(); ConflictChoice.SelectedIndex = 0;
         merging = await repository.MergeInProgress(); sequence = await repository.Sequence(); hasHead = await repository.HeadRevision() != null;
         await RefreshActionData();
     }
     private GitRepository Repo => repository ?? throw new InvalidOperationException(Localization.Text("リポジトリを開いてください。"));
     private string Remote => RemoteChoice.SelectedItem as string ?? "";
-    private string Branch => BranchChoice.SelectedItem as string ?? "";
+    private string Branch => (BranchChoice.SelectedItem as BranchRecord)?.Id ?? "";
     private string Conflict => ConflictChoice.SelectedItem as string ?? "";
     private async Task Operate(Func<Task> action) { await action(); await RefreshAfterOperation(); }
     private async Task RefreshAfterOperation()
@@ -291,7 +316,7 @@ public partial class MainWindow : Window
     }
     private async void Clone_Click(object sender, RoutedEventArgs e)
     {
-        await Act(async () => { if (repository != null) drafts[repository.Path] = Message.Text; repository = await GitRepository.Clone(CloneSource.Text, CloneLocation.Destination(CloneParent.Text, CloneSource.Text)); request = new("clone", []); Message.Clear(); initialSelection = true; selected.Clear(); await RefreshAfterOperation(); }, Localization.Text("Clone が完了しました。閉じて作業を始められます。"));
+        await Act(async () => { UpdateTransferProgress(TransferProgress.Waiting); if (repository != null) drafts[repository.Path] = Message.Text; repository = await GitRepository.Clone(CloneSource.Text, CloneLocation.Destination(CloneParent.Text, CloneSource.Text), ReportTransferProgress); request = new("clone", []); Message.Clear(); initialSelection = true; selected.Clear(); await RefreshAfterOperation(); UpdateTransferProgress(TransferProgress.Complete); }, Localization.Text("Clone が完了しました。閉じて作業を始められます。"));
     }
     private async void Switch_Click(object sender, RoutedEventArgs e) => await Act(() => Operate(() => Repo.SwitchBranch(Branch)), Localization.Text("ブランチを切り替えました。"));
     private async void CreateBranch_Click(object sender, RoutedEventArgs e)
@@ -338,6 +363,7 @@ public partial class MainWindow : Window
         var available = visibleChanges.Select(c => c.Path).ToHashSet();
         if (initialSelection) selected.UnionWith(available); else selected.IntersectWith(available);
         initialSelection = false; Files.Children.Clear(); Location.Text = $"{repository!.Path}  ·  {branch}";
+        Location.ToolTip = Location.Text;
         FileCount.Text = Localization.Format($"対象の変更 · {visibleChanges.Count} ファイル");
         DiffView.Text = Localization.Text("ファイルを選ぶと差分が表示されます。");
         foreach (var change in visibleChanges)
@@ -347,7 +373,7 @@ public partial class MainWindow : Window
             check.Checked += (_, _) => { selected.Add(change.Path); Controls(); };
             check.Unchecked += (_, _) => { selected.Remove(change.Path); Controls(); };
             var button = new Button { Content = $"{change.Label}  {change.Path}", HorizontalContentAlignment = HorizontalAlignment.Left };
-            button.Click += async (_, _) => await Act(async () => DiffView.Text = await repository.Diff(change.Path));
+            button.Click += async (_, _) => await Act(async () => { DiffView.Text = await repository.Diff(change.Path); WorkingComparison.SetDocument(await repository.FileComparison(change.Path)); });
             row.Children.Add(check); row.Children.Add(button); Files.Children.Add(row);
         }
         if (visibleChanges.Count == 0) Files.Children.Add(new TextBlock { Text = Localization.Text("対象に未コミットの変更はありません。"), Margin = new Thickness(12) });
@@ -362,4 +388,23 @@ public partial class MainWindow : Window
             commitCompleted = true;
         }, Localization.Text("コミットしました。"));
     }
+    private TransferProgress? transferProgress;
+    private void ReportTransferProgress(TransferProgress progress) => Dispatcher.Invoke(() => UpdateTransferProgress(progress));
+    private void UpdateTransferProgress(TransferProgress progress) {
+        transferProgress = progress; Progress.IsIndeterminate = progress.Percent == null; Progress.Value = progress.Percent ?? 0;
+        ProgressLabel.Text = Localization.Text(progress.Stage) + (progress.Percent is { } percent ? $"  {percent}%" : "");
+    }
+    private async void FetchBranches_Click(object sender, RoutedEventArgs e) => await Act(async () => {
+        UpdateTransferProgress(TransferProgress.Waiting); await Repo.Transfer("fetch", Remote, ReportTransferProgress, allBranches: true);
+        await RefreshAfterOperation(); UpdateTransferProgress(TransferProgress.Complete);
+    }, Localization.Text("リモートのブランチ一覧を更新しました。"));
+    private void CommitMessage_KeyDown(object sender, System.Windows.Input.KeyEventArgs e) {
+        if (e.Key == System.Windows.Input.Key.Enter && System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.Control && CommitButton.IsEnabled) {
+            e.Handled = true; Commit_Click(CommitButton, new RoutedEventArgs());
+        }
+    }
+    private async void Init_Click(object sender, RoutedEventArgs e) => await Act(async () => {
+        var path = LaunchRequest.InputPath(RepositoryPath.Text.Length > 0 ? RepositoryPath.Text : request.Paths.FirstOrDefault() ?? "");
+        repository = await GitRepository.Initialize(path); request = new("init", [path]); initialSelection = true; await RefreshAfterOperation();
+    }, Localization.Text("リポジトリを作成しました。"));
 }

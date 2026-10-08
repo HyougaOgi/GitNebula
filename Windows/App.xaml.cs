@@ -26,6 +26,7 @@ public partial class App : Application
         try { initialRequest = LaunchRequest.Parse(e.Args); }
         catch (Exception error) { MessageBox.Show(error.Message, "GitNebula", MessageBoxButton.OK, MessageBoxImage.Error); initialRequest = new("open", []); }
         var window = new MainWindow(initialRequest); MainWindow = window;
+        window.RouteRequest = request => OpenRequest(window, request);
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add(Localization.Text("GitNebula を開く"), null, (_, _) => Dispatcher.Invoke(window.ShowHome));
         menu.Items.Add(Localization.Text("詳細設定…"), null, (_, _) => Dispatcher.InvokeAsync(() => window.ShowRequest(new LaunchRequest("settings", []))));
@@ -37,7 +38,8 @@ public partial class App : Application
         options.DropDownItems.Add(login); options.DropDownItems.Add(home); menu.Items.Add(options);
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add(Localization.Text("GitNebula を終了"), null, (_, _) => Dispatcher.Invoke(Quit));
-        tray = new Forms.NotifyIcon { Icon = System.Drawing.SystemIcons.Application, Text = "GitNebula", ContextMenuStrip = menu, Visible = true };
+        using var iconStream = typeof(App).Assembly.GetManifestResourceStream("GitNebula.icon.ico")!;
+        tray = new Forms.NotifyIcon { Icon = new System.Drawing.Icon(iconStream), Text = "GitNebula", ContextMenuStrip = menu, Visible = true };
         tray.MouseClick += (_, click) => { if (click.Button == Forms.MouseButtons.Left) Dispatcher.Invoke(window.ShowHome); };
         if (initialRequest.Action != "open" || initialRequest.Paths.Length > 0 || AppSettings.Current.ShowHomeOnLaunch) window.Show();
         _ = Listen(window);
@@ -76,17 +78,20 @@ public partial class App : Application
             catch (Exception error) { MessageBox.Show(error.Message, "GitNebula", MessageBoxButton.OK, MessageBoxImage.Error); }
         }
     }
-    private async Task OpenRequest(MainWindow home, LaunchRequest request)
+    internal async Task OpenRequest(MainWindow home, LaunchRequest request)
     {
         string? directory = request.Paths.FirstOrDefault() is { } entry ? LaunchRequest.DirectoryFor(entry) : null;
         if (directory != null && request.Action is not ("clone" or "init" or "settings")) {
             var candidate = new GitRepository(directory);
             try { await candidate.Open(); directory = candidate.Path; } catch (InvalidOperationException) { }
         }
-        var target = directory == null ? home : Windows.OfType<MainWindow>().FirstOrDefault(w => string.Equals(w.RepositoryDirectory, directory, StringComparison.OrdinalIgnoreCase));
+        var purpose = GitNebula.MainWindow.PurposeFor(request.Action);
+        var target = directory == null && purpose == home.WindowPurpose ? home : Windows.OfType<MainWindow>().FirstOrDefault(w => w.WindowPurpose == purpose && string.Equals(w.RepositoryDirectory, directory, StringComparison.OrdinalIgnoreCase));
         if (target == null) {
-            target = home.RepositoryDirectory == null && !home.IsBusy ? home : new MainWindow();
+            target = home.CanReuseLauncher ? home : new MainWindow();
         }
+        target.WindowPurpose = purpose;
+        target.RouteRequest = value => OpenRequest(home, value);
         await target.ShowRequest(request);
     }
     public void Quit()
@@ -98,6 +103,6 @@ public partial class App : Application
     }
     protected override void OnExit(ExitEventArgs e)
     {
-        stopping.Cancel(); tray?.Dispose(); instance?.Dispose(); stopping.Dispose(); base.OnExit(e);
+        stopping.Cancel(); tray?.Icon?.Dispose(); tray?.Dispose(); instance?.Dispose(); stopping.Dispose(); base.OnExit(e);
     }
 }

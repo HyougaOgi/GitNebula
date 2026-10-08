@@ -36,10 +36,12 @@ final class FinderMenu {
     func makeMenu(paths: [String], cloneParent: String? = nil, cloneIntoSelection: String? = nil, target: AnyObject, selector: Selector) -> NSMenu? {
         guard !paths.isEmpty else { return nil }
         let menu = NSMenu(title: "GitNebula")
-        let root = NSMenuItem(title: "GitNebula", action: nil, keyEquivalent: "")
+        let root = NSMenuItem(title: "GitNebula", action: selector, keyEquivalent: "")
+        root.target = target; root.tag = nextTag; nextTag += 1
         root.image = NSImage(systemSymbolName: "arrow.triangle.branch", accessibilityDescription: nil)
         let actions = NSMenu(title: "GitNebula")
         var context: [Int: LaunchRequest] = [:]
+        context[root.tag] = LaunchRequest(action: .workspace, paths: paths, showsActionMenu: true)
         func add(_ action: GitAction, title: String, paths: [String]) {
             let item = NSMenuItem(title: title, action: selector, keyEquivalent: "")
             item.target = target
@@ -67,8 +69,9 @@ final class FinderMenu {
         // associated with an earlier click. Bound storage in this long-lived process.
         requests.append(context)
         if requests.count > 16 { requests.removeFirst() }
-        root.submenu = actions
         menu.addItem(root)
+        let direct = NSMenuItem(title: L("GitNebula の機能"), action: nil, keyEquivalent: "")
+        direct.submenu = actions; menu.addItem(direct)
         return menu
     }
 

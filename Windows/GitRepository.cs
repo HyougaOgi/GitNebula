@@ -10,6 +10,13 @@ public sealed partial class GitRepository(string path)
 {
     public string Path { get; private set; } = path;
     public Task<string> Run(params string[] args) => GitProcess.Run(Path, args);
+    public static async Task<GitRepository> Initialize(string directory) {
+        if (!Directory.Exists(directory)) throw new InvalidOperationException(Localization.Text("作成済みのフォルダを選択してください。"));
+        var candidate = new GitRepository(directory);
+        var result = await GitProcess.RunWithOutput(directory, ["rev-parse", "--show-toplevel"], [0, 128]);
+        if (result.Output.Length > 0) throw new InvalidOperationException(Localization.Text("既存リポジトリ内には作成しません。"));
+        await candidate.Run("init", "--"); await candidate.Open(); return candidate;
+    }
     public async Task Open()
     {
         try { Path = (await Run("rev-parse", "--show-toplevel")).TrimEnd('\r', '\n'); }
@@ -79,14 +86,14 @@ public sealed partial class GitRepository(string path)
         catch (FileNotFoundException) { return false; }
         catch (DirectoryNotFoundException) { return false; }
     }
-    public static async Task<GitRepository> Clone(string source, string destination)
+    public static async Task<GitRepository> Clone(string source, string destination, Action<TransferProgress>? progress = null)
     {
         if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(destination)) throw new InvalidOperationException(Localization.Text("取得元と作成先を指定してください。"));
         var target = System.IO.Path.GetFullPath(destination);
         if (File.Exists(target) || Directory.Exists(target) && Directory.EnumerateFileSystemEntries(target).Any())
             throw new InvalidOperationException(Localization.Format($"作成先 {target} は既に使われています。別の保存先を指定してください。"));
         var runner = new GitRepository(System.IO.Path.GetDirectoryName(target)!);
-        await runner.Run("clone", "--", source, target);
+        await GitProcess.RunWithOutput(runner.Path, ["clone", "--progress", "--", source, target], [0], progress);
         var repo = new GitRepository(target); await repo.Open(); return repo;
     }
     public async Task<string> Graph() => string.IsNullOrWhiteSpace(await Run("rev-list", "--all", "--max-count=1")) ? Localization.Text("まだコミットはありません。") : await Run("log", "--graph", "--all", "--decorate", "--oneline", "-100", "--no-color");
@@ -138,8 +145,14 @@ public sealed partial class GitRepository(string path)
     public async Task CreateBranch(string name) { await RequireClean(); await Run("switch", "-c", await ValidateBranch(name)); }
     public async Task SwitchBranch(string name)
     {
-        await RequireClean(); if (!(await Branches()).Contains(name)) throw new InvalidOperationException(Localization.Text("ローカルブランチを選択してください。"));
-        await Run("switch", "--", await ValidateBranch(name));
+        await RequireClean();
+        if ((await Branches()).Contains(name)) { await Run("switch", "--", await ValidateBranch(name)); return; }
+        var record = (await BranchRecords(true)).FirstOrDefault(r => r.IsRemote && (r.Id == name || r.Name == name)) ?? throw new InvalidOperationException(Localization.Text("切り替えるブランチを選択してください。"));
+        await ValidateBranch(record.LocalName);
+        if ((await Branches()).Contains(record.LocalName)) throw new InvalidOperationException(Localization.Text("同じ名前のローカルブランチが存在します。ブランチを選び直してください。"));
+        var mappings = GitProcess.Lines(await GitProcess.RunAccepting(Path, ["config", "--get-all", "remote." + record.Remote + ".fetch"], [0, 1]));
+        if (!mappings.Any(m => MapsReference(m, record.Id))) await Run("config", "--add", "remote." + record.Remote + ".fetch", "+refs/heads/" + record.LocalName + ":" + record.Id);
+        await Run("switch", "--track", "-c", record.LocalName, record.Id);
     }
     public async Task RenameBranch(string oldName, string newName) { await RequireIdle(); await Run("branch", "-m", await ValidateBranch(oldName), await ValidateBranch(newName)); }
     public async Task DeleteBranch(string name) { await RequireIdle(); await Run("branch", "-d", "--", await ValidateBranch(name)); }

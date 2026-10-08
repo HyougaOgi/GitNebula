@@ -33,7 +33,7 @@ struct HistoryBrowserView: View {
                 }.frame(width: 250)
             }
             if let error { Text(error).foregroundStyle(.orange).textSelection(.enabled) }
-            VSplitView {
+            CommitBrowserPanes {
                 VStack(spacing: 0) {
                     Table(filtered, selection: Binding(get: { current?.id }, set: { selection = $0 })) {
                         TableColumn(L("コミット")) { commit in
@@ -61,10 +61,11 @@ struct HistoryBrowserView: View {
                         if loading { ProgressView().controlSize(.small) }
                         Button(L("さらに 200 件読み込む")) { limit += 200 }.disabled(loading || commits.count < limit)
                     }.padding(8)
-                }.frame(minHeight: 160, idealHeight: 240, maxHeight: 380)
+                }
+            } detail: {
                 if let commit = current {
-                    CommitInspector(repo: repo, commit: commit, model: model).id(commit.id).frame(minHeight: 330, maxHeight: .infinity)
-                } else { BrowserPlaceholder(title: L("コミットを選択"), detail: L("コミットの説明と変更ファイル一覧を表示します。"), symbol: "clock.arrow.circlepath").frame(minHeight: 250) }
+                    CommitInspector(repo: repo, commit: commit, model: model).id(commit.id)
+                } else { BrowserPlaceholder(title: L("コミットを選択"), detail: L("コミットの説明と変更ファイル一覧を表示します。"), symbol: "clock.arrow.circlepath") }
             }
         }
         .task(id: [repo.path, reference, String(limit), refreshID.uuidString, file ?? ""]) {
@@ -91,8 +92,9 @@ struct CommitInspector: View {
     @State private var parent: String?
     private var base: String? { parent ?? commit.parents.first }
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            CommitDetailsView(commit: commit).frame(minHeight: 150, idealHeight: 220, maxHeight: 280)
+        TabView {
+            CommitDetailsView(commit: commit).tabItem { Text(L("コミット情報")) }
+            VStack(alignment: .leading, spacing: 8) {
             HStack {
                 if commit.parents.count > 1 {
                     Picker(L("比較する親"), selection: Binding(get: { base ?? "" }, set: { parent = $0 })) {
@@ -110,7 +112,8 @@ struct CommitInspector: View {
                 }.padding(.horizontal, 10).disabled(model.busy || model.sequence != nil || !model.changes.isEmpty || commit.parents.count > 1)
                 if commit.parents.count > 1 { Text(L("マージコミットの履歴操作には親の指定が必要なため、この画面からは実行できません。")).font(.caption).foregroundStyle(.secondary) }
             }
-            RevisionFilesView(repo: repo, base: base, target: commit.id)
+                RevisionFilesView(repo: repo, base: base, target: commit.id)
+            }.tabItem { Text(L("変更ファイル")) }
         }.accessibilityIdentifier("commitInspector")
     }
     private func run(_ tool: RepositoryTool, model: Workspace) {

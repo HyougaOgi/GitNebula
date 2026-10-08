@@ -74,6 +74,7 @@ final class ScreenNavigation: ObservableObject {
     }
     private var launchID: UUID?
     private var closeWindow: (() -> Void)?
+    var routeRequest: ((LaunchRequest) -> Bool)?
 
     func installRoot(_ model: Workspace, close: (() -> Void)?) {
         guard launchID != model.launchID || frames.isEmpty else { return }
@@ -103,6 +104,7 @@ final class ScreenNavigation: ObservableObject {
         }
         let callbacks = actions()
         let host = TransparentHostingView(rootView: AnyView(AppearanceScope { view.environment(\.screenActions, callbacks) }))
+        host.sizingOptions = []
         let frame = Frame(host: host, model: model, title: title)
         model?.isScreenActive = true
         frames.append(frame)
@@ -135,7 +137,8 @@ final class ScreenNavigation: ObservableObject {
     func openRequest(_ request: LaunchRequest) {
         guard !busy else { return }
         let model = Workspace(); model.launch(request)
-        append(OperationScreen(model: model, closeWindow: closeWindow), model: model, title: request.action.title)
+        let page: UtilityPage? = request.showsActionMenu ? .repositoryActions : nil
+        append(OperationScreen(model: model, page: page, closeWindow: closeWindow), model: model, title: page?.title ?? request.action.title)
     }
     func home() {
         guard !busy, current?.model?.action != .open || current?.title != GitAction.open.title else { return }
@@ -148,6 +151,8 @@ final class ScreenNavigation: ObservableObject {
         if current?.model?.action == .open { back() }
     }
     func openAction(_ action: GitAction) {
+        guard !busy else { return }
+        if routeRequest?(request(for: action)) == true { return }
         guard let model = childModel(action: action) else { return }
         append(OperationScreen(model: model, closeWindow: closeWindow), model: model, title: action.title)
     }
@@ -181,6 +186,10 @@ final class ScreenNavigation: ObservableObject {
 final class RetainedScreenHost: NSView {
     weak var active: NSView?
     private var screenTitle = ""
+    override func layout() {
+        super.layout()
+        if active?.frame != bounds { active?.frame = bounds }
+    }
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if !screenTitle.isEmpty { window?.title = screenTitle }
@@ -219,7 +228,8 @@ struct ContentView: View {
     }
     var body: some View {
         RouteHost(navigation: navigation)
-            .frame(minWidth: 1050, minHeight: 720)
+            .frame(minWidth: WorkspaceWindowLayout.minimum.width, minHeight: WorkspaceWindowLayout.minimum.height)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .onAppear { navigation.installRoot(model, close: closeWindow) }
             .onChange(of: model.launchID) { _ in navigation.installRoot(model, close: closeWindow) }
     }
@@ -240,7 +250,7 @@ struct DetailScreen<Content: View>: View {
                 Spacer()
                 Label("GitNebula", systemImage: "sparkles").font(.caption).foregroundStyle(.purple)
             }
-            Text(subtitle).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
+            Text(subtitle).font(.callout).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle).textSelection(.enabled).help(subtitle)
             content().frame(maxWidth: .infinity, maxHeight: .infinity)
         }.padding(16).background(NebulaBackground()).foregroundStyle(.primary)
             .tint(Color(red: 0.70, green: 0.62, blue: 1))

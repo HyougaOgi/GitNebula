@@ -7,11 +7,14 @@ struct RemoteOverview: Sendable {
     let behind: Int?
 }
 struct BranchRecord: Identifiable, Sendable {
-    var id: String { name }
+    var id: String { remote ? "refs/remotes/" + name : name }
     let name: String
     let commit: String
     let subject: String
     let upstream: String
+    var remote = false
+    var remotePrefix = ""
+    var localName: String { remote ? String(name.dropFirst(remotePrefix.count + 1)) : name }
 }
 
 extension GitRepository {
@@ -26,12 +29,18 @@ extension GitRepository {
         let counts = try run(["rev-list", "--left-right", "--count", head + "..." + remoteID, "--"]).split(whereSeparator: \.isWhitespace).compactMap { Int($0) }
         return RemoteOverview(url: url, tracking: tracking, ahead: counts.first, behind: counts.count > 1 ? counts[1] : nil)
     }
-    func branchRecords() throws -> [BranchRecord] {
-        try run(["for-each-ref", "--sort=refname", "--format=%(refname:short)%00%(objectname:short)%00%(contents:subject)%00%(upstream:short)", "refs/heads"]).split(separator: "\n").compactMap { line in
+    func branchRecords(includeRemote: Bool = false) throws -> [BranchRecord] {
+        let refs = includeRemote ? ["refs/heads", "refs/remotes"] : ["refs/heads"]
+        let remoteNames = includeRemote ? try remotes().sorted { $0.count > $1.count } : []
+        let records = try run(["for-each-ref", "--sort=refname", "--format=%(refname:short)%00%(objectname)%00%(contents:subject)%00%(upstream:short)%00%(refname)%00%(symref)"] + refs).split(separator: "\n").compactMap { line -> BranchRecord? in
             let fields = line.components(separatedBy: "\0")
-            guard fields.count == 4 else { return nil }
-            return BranchRecord(name: fields[0], commit: fields[1], subject: fields[2], upstream: fields[3])
+            guard fields.count == 6, fields[5].isEmpty else { return nil }
+            let remote = fields[4].hasPrefix("refs/remotes/")
+            let name = String(fields[4].dropFirst(remote ? "refs/remotes/".count : "refs/heads/".count))
+            return BranchRecord(name: name, commit: fields[1], subject: fields[2], upstream: fields[3], remote: remote, remotePrefix: remoteNames.first { name.hasPrefix($0 + "/") } ?? "")
         }
+        let tracked = Set(records.filter { !$0.remote }.map(\.upstream))
+        return records.filter { !$0.remote || !tracked.contains($0.name) }
     }
 }
 
@@ -108,26 +117,42 @@ struct BranchSelectionView: View {
     @State private var error: String?
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            TextField(L("ブランチを検索"), text: $query).textFieldStyle(.roundedBorder)
+            HStack {
+                TextField(L("ブランチを検索"), text: $query).textFieldStyle(.roundedBorder)
+                Button(L("リモートから更新"), action: model.fetchRemoteBranches).disabled(model.busy || model.chosenRemote.isEmpty)
+            }
             Table(branches.filter { query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) }, selection: Binding(get: { Optional(model.chosenBranch) }, set: { model.chosenBranch = $0 ?? "" })) {
                 TableColumn(L("ブランチ")) { branch in
-                    HStack { Image(systemName: branch.name == model.branch ? "checkmark.circle.fill" : "arrow.triangle.branch"); Text(branch.name) }
+                    HStack { Image(systemName: !branch.remote && branch.name == model.branch ? "checkmark.circle.fill" : "arrow.triangle.branch"); Text(branch.name) }
                 }.width(min: 150, ideal: 220)
+                TableColumn(L("種類")) { Text($0.remote ? L("リモート") : L("ローカル")) }.width(90)
                 TableColumn(L("最新のコミット"), value: \.subject)
                 TableColumn(L("追跡先"), value: \.upstream).width(min: 100, ideal: 140)
             }.frame(minHeight: 200).accessibilityIdentifier("branchTable")
+            if let selected = branches.first(where: { $0.id == model.chosenBranch }), selected.remote {
+                Text(L("追跡ブランチ「\(selected.localName)」を作成して切り替えます。")).foregroundStyle(.secondary)
+            }
+            if let progress = model.transferProgress { GitTransferProgressView(progress: progress, busy: model.busy) }
             if !model.changes.isEmpty { Text(L("切り替える前に、作業中の変更をコミットまたは Stash してください。")).foregroundStyle(.orange) }
             if let error { Text(error).foregroundStyle(.orange) }
             HStack {
                 Text(L("現在: ") + model.branch).foregroundStyle(.secondary)
                 Spacer()
-                Button(L("\(model.chosenBranch) に切り替え")) { let name = model.chosenBranch; model.operation { try $0.switchBranch(name) } }
-                    .buttonStyle(.borderedProminent).disabled(model.chosenBranch.isEmpty || model.chosenBranch == model.branch || !model.changes.isEmpty)
+                Button(L("\(branches.first { $0.id == model.chosenBranch }?.name ?? model.chosenBranch) に切り替え")) { let name = model.chosenBranch; model.operation { try $0.switchBranch(name) } }
+                    .buttonStyle(.borderedProminent).disabled(!branches.contains { $0.id == model.chosenBranch } || model.chosenBranch == model.branch || !model.changes.isEmpty || model.busy)
             }
         }
         .task(id: model.revisionID) {
             guard let repo = model.repository else { return }
-            do { let result = try await Task.detached { try repo.branchRecords() }.value; if !Task.isCancelled { branches = result } }
+            do {
+                let result = try await Task.detached { try repo.branchRecords(includeRemote: true) }.value
+                if !Task.isCancelled {
+                    branches = result
+                    if !result.contains(where: { $0.id == model.chosenBranch }) || model.chosenBranch == model.branch {
+                        model.chosenBranch = result.first(where: { $0.id != model.branch })?.id ?? model.branch
+                    }
+                }
+            }
             catch { if !Task.isCancelled { self.error = error.localizedDescription } }
         }
     }

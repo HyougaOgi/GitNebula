@@ -2,9 +2,24 @@ using System.IO;
 namespace GitNebula;
 
 public record StashEntry(string Reference, string Id, string Title);
-public record CommitRecord(string Id, string Author, string Date, string Subject, string Message, string[] Parents, string Decorations = "")
+public record CommitDetailField(string Id, string Title, string Value);
+public record CommitRecord(string Id, string Author, string Date, string Subject, string Message, string[] Parents, string Decorations = "", string Email = "", string Committer = "", string CommitterEmail = "", string CommitDate = "", string Tree = "", string[]? BranchNames = null)
 {
     public string ShortId => Id[..Math.Min(8, Id.Length)];
+    public CommitDetailField[] DetailFields => new[] {
+        new CommitDetailField("id", Localization.Text("コミット ID"), Id),
+        new CommitDetailField("message", Localization.Text("メッセージ"), Message),
+        new CommitDetailField("author", Localization.Text("作成者"), Author),
+        new CommitDetailField("email", Localization.Text("作成者のメール"), Email),
+        new CommitDetailField("authorDate", Localization.Text("作成日時"), Date),
+        new CommitDetailField("committer", Localization.Text("コミットした人"), Committer),
+        new CommitDetailField("committerEmail", Localization.Text("コミットした人のメール"), CommitterEmail),
+        new CommitDetailField("commitDate", Localization.Text("コミット日時"), CommitDate),
+        new CommitDetailField("parents", Localization.Text("親コミット"), string.Join("\n", Parents)),
+        new CommitDetailField("references", Localization.Text("ブランチ・タグ"), Decorations),
+        new CommitDetailField("tree", Localization.Text("ツリー ID"), Tree)
+    }.Where(f => f.Value.Length > 0).ToArray();
+    public string DetailsText => string.Join("\n\n", DetailFields.Select(f => f.Title + ":\n" + f.Value));
 }
 public sealed partial class GitRepository
 {
@@ -45,14 +60,25 @@ public sealed partial class GitRepository
     }
     public async Task DropStash(string id) { await RequireIdle(); await Run("stash", "drop", await StashReference(id)); }
     public async Task<string> ShowStash(string id) => await Run("stash", "show", "--include-untracked", "--no-ext-diff", "--no-textconv", "--patch", await StashReference(id));
-    public async Task<CommitRecord[]> History(bool topological = false, int limit = 200)
+    public async Task<CommitRecord[]> History(bool topological = false, int limit = 200, string? reference = null)
     {
         if (string.IsNullOrWhiteSpace(await Run("rev-list", "--all", "--max-count=1"))) return [];
-        var output = await Run("log", "--all", topological ? "--topo-order" : "--date-order", "-z", "-" + limit, "--format=%H%x00%an%x00%aI%x00%s%x00%B%x00%P%x00%D");
+        var output = await Run("log", reference == null ? "--all" : await Revision(reference), topological ? "--topo-order" : "--date-order", "--decorate=short", "-z", "-" + limit, "--format=%H%x00%an%x00%aI%x00%s%x00%B%x00%P%x00%D%x00%ae%x00%cn%x00%ce%x00%cI%x00%T");
         var fields = output.Split('\0');
+        var branchNames = new Dictionary<string, List<string>>();
+        if (topological) {
+            var refs = await Run("for-each-ref", "--format=%(objectname)%00%(refname)%00%(symref)", "refs/heads", "refs/remotes");
+            foreach (var line in refs.Split('\n')) {
+                var parts = line.TrimEnd('\r').Split('\0');
+                if (parts.Length != 3 || parts[2].Length > 0) continue;
+                var prefix = parts[1].StartsWith("refs/heads/", StringComparison.Ordinal) ? "refs/heads/" : "refs/remotes/";
+                if (!branchNames.TryGetValue(parts[0], out var names)) branchNames[parts[0]] = names = new();
+                names.Add(parts[1][prefix.Length..]);
+            }
+        }
         var records = new List<CommitRecord>();
-        for (var i = 0; i + 6 < fields.Length; i += 7)
-            records.Add(new(fields[i].TrimStart('\r', '\n'), fields[i + 1], fields[i + 2], fields[i + 3], fields[i + 4], fields[i + 5].Split(' ', StringSplitOptions.RemoveEmptyEntries), fields[i + 6]));
+        for (var i = 0; i + 11 < fields.Length; i += 12)
+            records.Add(new(fields[i].TrimStart('\r', '\n'), fields[i + 1], fields[i + 2], fields[i + 3], fields[i + 4], fields[i + 5].Split(' ', StringSplitOptions.RemoveEmptyEntries), fields[i + 6], fields[i + 7], fields[i + 8], fields[i + 9], fields[i + 10], fields[i + 11], topological ? branchNames.GetValueOrDefault(fields[i].TrimStart('\r', '\n'))?.ToArray() ?? [] : null));
         return records.ToArray();
     }
     public async Task<string> ShowCommit(string id) => await Run("show", "--no-ext-diff", "--no-textconv", "--no-color", "--stat", "--patch", await Revision(id), "--");

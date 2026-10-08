@@ -4,7 +4,7 @@ Native GTK 4 application using the distribution's Python and PyGObject bindings.
 
 ```sh
 # Debian / Ubuntu
-sudo apt-get install python3-gi gir1.2-gtk-4.0 git
+sudo apt-get install python3-gi python3-cairo python3-gi-cairo gir1.2-gtk-4.0 libsecret-tools git
 /usr/bin/python3 Linux/main.py
 
 # Open the commit dialog directly
@@ -14,6 +14,8 @@ sudo apt-get install python3-gi gir1.2-gtk-4.0 git
 ```
 
 Requires Python 3.10+, Git 2.29+, and an X11 or Wayland desktop.
+
+History and both graph modes reserve space for commit information when the window shrinks. Paths stay on one line, navigation and history search share rows, and long operation results scroll within a bounded area. Every commit field remains reachable without maximizing.
 
 ## Install and file-manager menus
 
@@ -26,9 +28,11 @@ This copies the application into `~/.local/share/gitnebula`, creates `~/.local/b
 - A Nautilus Python extension. Install your distribution's `python3-nautilus` package and restart Nautilus.
 - A KDE/Dolphin service menu. Restart the file manager if the action does not appear immediately.
 
-Right-click a local file, folder, or folder background and choose **GitNebula → 変更をコミット / 差分を確認 / 履歴を表示 / Pull / Push / Fetch / ブランチを切り替え / Clone**. Commit and Diff use the selected files or folder descendants. Multiple selections must belong to one repository. Clone starts with the clicked location as its destination parent. Each invocation has a separate window, preserving existing drafts.
+Right-click **GitNebula** to open the repository operation chooser, or select a dedicated operation under **GitNebula の機能**. Actions follow Changes / History / Branches / Remotes / Repository order. Commit and Diff preselect the clicked file or folder descendants. Multiple selections must belong to one repository. In Nautilus, Clone from a folder row uses its containing directory, and Clone from the background uses that directory itself; the repository name is automatic. Each repository retains separate work, History and Graph windows with independent sizes; matching requests reuse their window and preserve the graph camera. Different repositories preserve windows and drafts. Back returns to the repository chooser when opened directly from a file manager.
 
 For other file managers, configure a custom action such as `gitnebula --action commit --path /path/to/repository`. The old `gitnebula /path/to/repository` form opens an operation chooser. Re-run the installer after upgrading and restart the file manager to reload the menu. Installing menus does not run Git operations.
+
+Dolphin provides explicit **この階層に Clone** and **選択フォルダ内に Clone** entries. The first uses the clicked folder's parent, preserving existing files in both directories; the second uses the selected directory itself. Nautilus background Clone uses the current directory.
 
 ```sh
 # Remove only GitNebula's installed files and menu entries
@@ -37,12 +41,27 @@ python3 Linux/install.py --uninstall
 
 An alternate installation root is available through `--prefix`. Keep that prefix the same when uninstalling.
 
+
+## Application and Git screens
+
+Normal startup registers one [StatusNotifierItem](https://specifications.freedesktop.org/status-notifier-item/latest/status-notifier-item.html) and leaves repository operations to file-manager windows. Clicking the tray icon opens a simple nebula screen with Settings. The tray menu contains Home, Settings, startup options and Quit. Closing a window keeps the app running by default. A tray host is required: KDE and compatible desktops provide one; GNOME needs a compatible AppIndicator/StatusNotifier extension. Without a tray host, startup displays Home so the application remains accessible.
+
+Settings include System / Light / Dark, actual window opacity, Japanese / English, Git executable, SSH key and a masked passphrase. System appearance follows the desktop portal or GTK preferences. Passphrases are stored through Secret Service using `secret-tool`, separate from JSON settings, and used only for the configured key. HTTPS uses Git's credential helper. Autostart and opening Home at startup are configurable. Nebula gas, stars and the title animate while visible and pause when motion is disabled.
+
+History and the 2D / 4D graph show full commit IDs. Selecting a commit displays its complete message, author/committer emails and dates, parents, references and tree. Full ID, message, each field and all information have separate native copy buttons. One scrollable body keeps all details reachable in small windows. The Changed Files tab supports parent selection for merges and aligned full-file comparisons with line numbers, change colors, synchronized scrolling and change navigation. Working files use the same comparison view.
+
+4D groups first-parent logs by branch, sizes nodes by loaded commit count and connects actual fork/merge parents. The nebula is a time-varying XYZ density volume. Drag to orbit, scroll to zoom, double-click to focus and use the timeline to replay history. Equal reverse scrolling restores the same camera position, including beyond zoom limits. Rendering runs outside GTK callbacks so input remains responsive.
+
+Commit has a multiline message editor, Ctrl+Enter and a Push button after success. Remote operations and Clone display Git's current-stage percentage and progress bar; connection/verification stages are indeterminate. Completion is shown after Git and refresh finish, and output/result summaries remain available.
+
+Dedicated screens provide Stash save/preview/Apply/Pop/Drop; Cherry-pick, Revert and Rebase with conflict Continue/Abort; branch creation/rename/deletion; Stage/Unstage/Ignore/Discard; tags; remotes; identity; Init; commit comparison; file history; Blame; Reflog; Soft/Mixed/Hard Reset; binary patch export/check/application; Worktree creation/listing; and Submodule registration/update. Existing destination files and dirty worktrees are protected as appropriate. Back retains commit drafts and selection. See the [feature matrix](../shared/FEATURES.md) and [verified coverage](../shared/VALIDATION.md).
+
 ## Tests
 
 ```sh
 python3 -m unittest discover -s tests -v
-sudo apt-get install xvfb xauth
-xvfb-run -a /usr/bin/python3 tests/gtk_smoke.py
+sudo apt-get install xvfb xauth dbus-x11
+dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/gtk_smoke.py
 ```
 
 ## Packages and signatures

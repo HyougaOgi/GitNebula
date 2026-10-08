@@ -50,12 +50,13 @@ final class RepositoryWindowTests: LocalizedTestCase {
         XCTAssertTrue(draft.busy, "The second repository must not wait for the first")
         delegate.application(NSApp, open: [try LaunchRequest(action: .pull, paths: [secondRepo.path]).url()])
         try await wait { delegate.navigation.current?.model?.action == .pull && !delegate.navigation.busy }
-        XCTAssertTrue(delegate.window === secondWindow)
+        XCTAssertFalse(delegate.window === secondWindow, "Repository work must preserve the graph window")
+        XCTAssertEqual(secondWindow.title, "Git グラフ — GitNebula")
         XCTAssertTrue(navigation.current === frame)
         gate.signal(); try await wait { !draft.busy }
         delegate.application(NSApp, open: [try firstRequest.url()])
         try await wait { delegate.window === firstWindow && !delegate.navigation.busy }
-        XCTAssertEqual(delegate.windows.count, 2)
+        XCTAssertEqual(delegate.windows.count, 3)
         XCTAssertTrue(delegate.navigation.current === frame)
         XCTAssertEqual(draft.message, "keep this draft"); XCTAssertEqual(draft.selected, ["file.txt"])
         XCTAssertEqual(try firstRepo.readFile("file.txt"), "working\n")

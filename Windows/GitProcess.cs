@@ -30,7 +30,7 @@ public static class GitProcess
     public static string[] Lines(string output) => output.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line => line.TrimEnd('\r')).Where(line => line.Length > 0).ToArray();
     public static Task<string> Run(string path, params string[] arguments) => RunAccepting(path, arguments, [0]);
     public static async Task<string> RunAccepting(string path, string[] arguments, int[] accepting) => (await RunWithOutput(path, arguments, accepting)).Output;
-    public static async Task<(string Output, string Diagnostics)> RunWithOutput(string path, string[] arguments, int[] accepting)
+    public static async Task<(string Output, string Diagnostics)> RunWithOutput(string path, string[] arguments, int[] accepting, Action<TransferProgress>? progress = null)
     {
         var info = new ProcessStartInfo(Executable) {
             UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true,
@@ -49,7 +49,16 @@ public static class GitProcess
         catch (Win32Exception error) { throw new InvalidOperationException(Localization.Format($"Git を起動できません（{Executable}）。設定で Git の実行ファイルを確認してください。\n{error.Message}"), error); }
         process.StandardInput.Close();
         var output = process.StandardOutput.ReadToEndAsync();
-        var errorOutput = process.StandardError.ReadToEndAsync();
+        async Task<string> ReadDiagnostics() {
+            var diagnostics = new StringBuilder(); var buffer = new char[4096];
+            var parser = progress == null ? null : new TransferProgressParser(progress);
+            int count;
+            while ((count = await process.StandardError.ReadAsync(buffer.AsMemory())) > 0) {
+                var chunk = new string(buffer, 0, count); diagnostics.Append(chunk); parser?.Feed(chunk);
+            }
+            parser?.Finish(); return diagnostics.ToString();
+        }
+        var errorOutput = ReadDiagnostics();
         await process.WaitForExitAsync();
         var stdout = await output; var stderr = await errorOutput;
         if (!accepting.Contains(process.ExitCode)) {

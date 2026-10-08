@@ -9,7 +9,7 @@ try
     AppSettings.Current.Language = "ja";
     var orderedActions = LaunchRequest.MenuGroups.SelectMany(group => group.Actions).ToArray();
     Check(LaunchRequest.MenuGroups.Select(group => group.Title).SequenceEqual(new[] { "変更", "履歴", "ブランチ", "リモート", "リポジトリ" }), "menu group order");
-    Check(orderedActions.Distinct().Count() == orderedActions.Length && orderedActions.ToHashSet().SetEquals(LaunchRequest.Actions.Keys.Except(new[] { "open", "settings" })), "menu includes each Git action exactly once");
+    Check(orderedActions.Distinct().Count() == orderedActions.Length && orderedActions.ToHashSet().SetEquals(LaunchRequest.Actions.Keys.Except(new[] { "open", "menu", "settings" })), "menu includes each Git action exactly once");
     var key = Path.Combine(temporary, "id ' 星 & key");
     var info = new System.Diagnostics.ProcessStartInfo(); info.Environment["GIT_SSH_COMMAND"] = "existing SSH";
     using (var ssh = new SSHConfiguration()) {
@@ -42,7 +42,7 @@ try
     Check(!request.Includes("unrelated", root), "exclude unrelated changes");
     Check(LaunchRequest.Parse(["--open", root]).Action == "open", "legacy launch");
     bool invalidAction = false;
-    try { LaunchRequest.Parse(["--action", "reset"]); } catch (ArgumentException) { invalidAction = true; }
+    try { LaunchRequest.Parse(["--action", "not-an-action"]); } catch (ArgumentException) { invalidAction = true; }
     Check(invalidAction, "reject unknown action");
     await repo.Open(); Check((await repo.Changes()).Count == 0, "empty repository");
     bool rejected = false;
@@ -206,6 +206,8 @@ try
     rejected = false; try { await repo.Run("this-command-does-not-exist"); } catch (InvalidOperationException error) { rejected = error.Message.Contains("終了コード") && error.Message.Contains("not a git command"); }
     Check(rejected, "actionable Git stderr");
     Console.WriteLine("PASS: CRLF parsing, stash save/list/apply/pop/drop, tag/remote, cherry-pick/revert/rebase and conflict recovery");
+    await ParityChecks.Run(temporary);
+    await AdvancedChecks.Run(temporary);
     AppSettings.Current.Language = "en";
     Check(Localization.Text("詳細設定") == "Settings" && Localization.Format($"対象の変更 · {3} ファイル") == "Selected Change · 3 files", "English UI and interpolation");
     var userMessage = "詳細設定";

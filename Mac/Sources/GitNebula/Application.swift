@@ -12,7 +12,7 @@ struct GitNebulaApp {
     }
 }
 
-/// Each repository retains its own window, navigation and drafts.
+/// Repository work, history and graphs retain independent windows and navigation.
 @MainActor
 final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @MainActor private final class WindowContext {
@@ -20,6 +20,7 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         let navigation = ScreenNavigation()
         var window: NSWindow?
         var requestedDirectory: String?
+        var purpose: GitAction?
         var repositoryDirectory: String? {
             let directory = navigation.frames.reversed().compactMap(\.model).compactMap(\.repository).first?.path ?? model.repository?.path ?? requestedDirectory
             return directory.map(LaunchRequest.canonicalDirectory)
@@ -41,6 +42,7 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     private var statusItem: NSStatusItem?
     private var pendingRequests: [LaunchRequest] = []
     private var routingRequest = false
+    var hasPendingLaunchRequests: Bool { routingRequest || !pendingRequests.isEmpty }
     private var terminating = false
     private var launched = false
     private var appearanceObserver: NSObjectProtocol?
@@ -109,11 +111,26 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         ensureWindow(for: currentContext)
     }
     private func ensureWindow(for context: WindowContext) {
+        context.navigation.routeRequest = { [weak self, weak context] request in
+            guard let self, let context, Self.windowPurpose(request.action) != context.purpose else { return false }
+            self.pendingRequests.append(request); self.drainRequests()
+            return true
+        }
         guard context.window == nil else { return }
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1220, height: 820), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        let style: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable]
+        var size = WorkspaceWindowLayout.preferred
+        if let visible = NSScreen.main?.visibleFrame {
+            let available = NSWindow.contentRect(forFrameRect: visible, styleMask: style).size
+            size.width = min(size.width, available.width - 32)
+            size.height = min(size.height, available.height - 32)
+        }
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: style, backing: .buffered, defer: false)
+        window.contentMinSize = WorkspaceWindowLayout.minimum
         window.title = "GitNebula"; window.isOpaque = false; window.backgroundColor = .clear
         window.isReleasedWhenClosed = false; window.delegate = self
-        window.contentView = TransparentHostingView(rootView: ContentView(model: context.model, closeWindow: { [weak window] in window?.performClose(nil) }, navigation: context.navigation))
+        let host = TransparentHostingView(rootView: ContentView(model: context.model, closeWindow: { [weak window] in window?.performClose(nil) }, navigation: context.navigation))
+        host.sizingOptions = []
+        window.contentView = host
         window.center()
         if let previous = currentContext.window, previous !== window {
             window.setFrameOrigin(NSPoint(x: previous.frame.minX + 28, y: previous.frame.minY - 28))
@@ -282,10 +299,11 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                 if ![GitAction.clone, .initialize].contains(request.action), let repo = try? GitRepository.open(directory) { return repo.path }
                 return LaunchRequest.canonicalDirectory(directory)
             }.value
+            let purpose = Self.windowPurpose(request.action)
             let context: WindowContext
-            if let resolved, let existing = self.contexts.first(where: { $0.repositoryDirectory == resolved }) {
+            if let resolved, let existing = self.contexts.first(where: { $0.repositoryDirectory == resolved && $0.purpose == purpose }) {
                 context = existing
-            } else if resolved == nil || self.currentContext.repositoryDirectory == nil && !self.currentContext.busy {
+            } else if self.currentContext.repositoryDirectory == nil && !self.currentContext.busy && self.currentContext.purpose == nil {
                 context = self.currentContext
             } else {
                 context = WindowContext(); self.repositoryContexts.append(context)
@@ -293,17 +311,23 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             if context.busy {
                 self.pendingRequests.append(request)
             } else {
+                context.purpose = purpose
                 context.requestedDirectory = resolved
                 self.ensureWindow(for: context)
+                var targetRequest = request
+                if (purpose == .log || purpose == .graph), let resolved { targetRequest = LaunchRequest(action: request.action, paths: [resolved]) }
                 if let current = context.navigation.current?.model,
-                   current.action == request.action && current.request(for: request.action).paths == request.paths {
+                   current.action == targetRequest.action && current.displaysActionMenu == targetRequest.showsActionMenu && current.request(for: targetRequest.action).paths == targetRequest.paths {
                     current.refresh()
-                } else { context.navigation.openRequest(request) }
+                } else { context.navigation.openRequest(targetRequest) }
                 self.showWindow(for: context)
             }
             self.routingRequest = false
             self.scheduleRequests()
         }
+    }
+    private static func windowPurpose(_ action: GitAction) -> GitAction {
+        action == .log || action == .graph ? action : .workspace
     }
     private func scheduleRequests() {
         if !pendingRequests.isEmpty { DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.drainRequests() } }

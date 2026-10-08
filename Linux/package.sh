@@ -6,8 +6,8 @@ case "$release_mode" in --signed) : "${GPG_KEY_ID:?Set a signing key already ins
 mkdir -p dist/linux
 archive="dist/linux/GitNebula-linux.tar.gz"
 rm -f "$archive.asc"
-tar -czf "$archive" LICENSE README.md Linux/main.py Linux/git_backend.py Linux/actions.py Linux/nautilus_menu.py Linux/install.py Linux/README.md
-sha256sum "$archive" > "$archive.sha256"
+tar -czf "$archive" LICENSE README.md Linux/*.py Linux/en.json Linux/gitnebula.png Linux/README.md
+if command -v sha256sum >/dev/null 2>&1; then sha256sum "$archive" > "$archive.sha256"; else shasum -a 256 "$archive" > "$archive.sha256"; fi
 if [ "$release_mode" = --signed ]; then
   gpg --batch --yes --local-user "$GPG_KEY_ID" --armor --detach-sign "$archive"
   gpg --verify "$archive.asc" "$archive"

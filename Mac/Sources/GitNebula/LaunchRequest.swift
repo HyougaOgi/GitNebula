@@ -89,12 +89,14 @@ enum GitAction: String, CaseIterable, Sendable {
 struct LaunchRequest: Sendable {
     let action: GitAction
     let paths: [String]
+    var showsActionMenu = false
 
     func url() throws -> URL {
         var components = URLComponents()
         components.scheme = "gitnebula"
         components.host = action.rawValue
         components.queryItems = paths.map { URLQueryItem(name: "path", value: $0) }
+        if showsActionMenu { components.queryItems?.append(URLQueryItem(name: "menu", value: "1")) }
         guard !paths.isEmpty, let url = components.url else { throw Self.invalid() }
         return url
     }
@@ -122,7 +124,8 @@ struct LaunchRequest: Sendable {
         guard url.scheme == "gitnebula", let host = url.host, let action = GitAction(rawValue: host) else { throw invalid() }
         let paths = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.filter { $0.name == "path" }.compactMap(\.value) ?? []
         guard !paths.isEmpty else { throw invalid() }
-        return LaunchRequest(action: action, paths: paths)
+        let menu = action == .workspace && URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.contains(where: { $0.name == "menu" && $0.value == "1" }) == true
+        return LaunchRequest(action: action, paths: paths, showsActionMenu: menu)
     }
     static func invalid() -> NSError {
         NSError(domain: "GitNebula", code: 1, userInfo: [NSLocalizedDescriptionKey: L("起動引数が不正です。--action commit --path /path/to/repo の形式で指定してください。")])

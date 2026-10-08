@@ -1,40 +1,44 @@
-<Window x:Class="GitNebula.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="GitNebula" Width="900" Height="720" MinWidth="700" MinHeight="500" Background="{DynamicResource WindowBrush}" Foreground="{DynamicResource TextBrush}" WindowStartupLocation="CenterScreen">
+<Window x:Class="GitNebula.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:GitNebula" Title="GitNebula" Icon="Assets/GitNebula.png" Width="900" Height="720" MinWidth="700" MinHeight="600" Background="{DynamicResource WindowBrush}" Foreground="{DynamicResource TextBrush}" WindowStartupLocation="CenterScreen">
   <Grid>
     <Grid IsHitTestVisible="False">
       <Rectangle><Rectangle.Fill><RadialGradientBrush Center="0.95,0" GradientOrigin="0.95,0" RadiusX="1" RadiusY="1"><GradientStop Color="#64324B85"/><GradientStop Color="#00090D1D" Offset="1"/></RadialGradientBrush></Rectangle.Fill></Rectangle>
       <Rectangle><Rectangle.Fill><RadialGradientBrush Center="0,1" GradientOrigin="0,1" RadiusX="0.8" RadiusY="0.9"><GradientStop Color="#50177B9B"/><GradientStop Color="#00090D1D" Offset="1"/></RadialGradientBrush></Rectangle.Fill></Rectangle>
       <Canvas x:Name="Stars" ClipToBounds="True" SizeChanged="Stars_SizeChanged"/>
     </Grid>
-    <DockPanel Margin="24" x:Name="Workspace">
+    <DockPanel Margin="12" x:Name="Workspace">
       <WrapPanel DockPanel.Dock="Top"><Button x:Name="BackButton" Content="戻る" Click="Back_Click"/><Button x:Name="CommitEntry" Content="Commit" Tag="commit" Click="Navigate_Click"/></WrapPanel>
       <StackPanel DockPanel.Dock="Top">
-        <DockPanel Margin="0,0,0,22"><TextBlock Text="✧ GitNebula" FontSize="24" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}"/><TextBlock Text="YOUR CODE, IN ORBIT" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{DynamicResource MutedBrush}"/></DockPanel>
-        <TextBlock x:Name="Heading" FontSize="28" FontWeight="Bold"/>
+        <TextBlock x:Name="Heading" FontSize="24" FontWeight="Bold"/>
         <TextBlock x:Name="Hint" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" Margin="0,8,0,12"/>
-        <TextBlock x:Name="Location" Text="リポジトリを選択してください。" TextWrapping="Wrap"/>
+        <TextBlock x:Name="Location" Text="リポジトリを選択してください。" TextTrimming="CharacterEllipsis"/>
         <DockPanel x:Name="PathPanel" Margin="0,8,0,0">
           <Button DockPanel.Dock="Right" x:Name="OpenPathButton" Content="パスを開く" Click="OpenPath_Click"/>
+          <Button DockPanel.Dock="Right" x:Name="OpenButton" Content="フォルダを選択" Click="Open_Click"/>
+          <Button DockPanel.Dock="Right" x:Name="RefreshButton" Content="更新" Click="Refresh_Click"/>
           <TextBox x:Name="RepositoryPath" AutomationProperties.Name="リポジトリのパス" ToolTip="リポジトリのパスを入力して Enter" KeyDown="RepositoryPath_KeyDown"/>
         </DockPanel>
-        <WrapPanel Margin="0,8,0,8"><Button x:Name="OpenButton" Content="フォルダを選択" Click="Open_Click"/><Button x:Name="RefreshButton" Content="更新" Click="Refresh_Click"/></WrapPanel>
       </StackPanel>
       <StackPanel DockPanel.Dock="Bottom">
         <WrapPanel x:Name="SequenceBanner"><TextBlock Text="競合または進行中の Git 操作があります。" Foreground="#FFBE90" VerticalAlignment="Center"/><Button Content="競合の解決を開く" Tag="conflicts" Click="Navigate_Click"/></WrapPanel>
         <StackPanel x:Name="CommitPanel" Margin="0,12,0,0">
           <TextBlock Text="コミットメッセージ" FontWeight="SemiBold"/>
-          <TextBox x:Name="Message" Margin="0,8" ToolTip="変更内容を短く説明してください" AutomationProperties.Name="コミットメッセージ" TextChanged="Message_Changed"/>
+          <TextBox x:Name="Message" Margin="0,8" Height="76" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" ToolTip="変更内容を説明してください" AutomationProperties.Name="コミットメッセージ" TextChanged="Message_Changed" PreviewKeyDown="CommitMessage_KeyDown"/>
           <DockPanel><TextBlock x:Name="SelectionCount" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center"/><Button x:Name="CommitButton" Content="コミット" Click="Commit_Click" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Right"/></DockPanel>
         </StackPanel>
-        <ProgressBar x:Name="Progress" IsIndeterminate="True" Height="3" Margin="0,12,0,0"/>
+        <ProgressBar x:Name="Progress" IsIndeterminate="True" Height="8" Margin="0,12,0,0" Maximum="100"/>
+        <TextBlock x:Name="ProgressLabel" FontSize="13" TextWrapping="Wrap"/>
         <ScrollViewer x:Name="StatusPanel" MaxHeight="110" VerticalScrollBarVisibility="Auto" Margin="0,12"><TextBlock x:Name="Status" Text="準備完了" TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}"/></ScrollViewer>
         <DockPanel><Button DockPanel.Dock="Right" x:Name="HomeButton" Content="アプリ画面" Click="Home_Click"/><ComboBox x:Name="OtherActions" Width="240" HorizontalAlignment="Left" SelectionChanged="OtherAction_Changed"/><Button x:Name="PushAfterCommitButton" Content="Push" Tag="push" Click="Navigate_Click" Visibility="Collapsed" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Right"/><Button Content="閉じる" Click="Close_Click" HorizontalAlignment="Right" IsCancel="True"/></DockPanel>
       </StackPanel>
       <Grid>
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+        <DockPanel Grid.Row="1" x:Name="ToolsPanel"/>
+        <StackPanel Grid.Row="1" x:Name="InitPanel"><TextBlock Text="作成済みフォルダに Git リポジトリを作成します。" TextWrapping="Wrap"/><Button Content="このフォルダにリポジトリを作成" Click="Init_Click" HorizontalAlignment="Left"/></StackPanel>
+        <ScrollViewer Grid.Row="1" x:Name="RepositoryActionsPanel" VerticalScrollBarVisibility="Auto"><StackPanel x:Name="RepositoryActions"/></ScrollViewer>
         <ScrollViewer Grid.Row="1" x:Name="HomePanel" VerticalScrollBarVisibility="Auto">
           <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,70">
-            <Canvas x:Name="NebulaScene" Width="360" Height="210" HorizontalAlignment="Center" Margin="0,0,0,24" AutomationProperties.Name="星雲"/>
-            <TextBlock Text="GitNebula" FontSize="38" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,0,0,24"/>
+            <local:NebulaHomeView Width="500" Height="300" HorizontalAlignment="Center" Margin="0,0,0,24" AutomationProperties.Name="星雲"/><Canvas x:Name="NebulaScene" Visibility="Collapsed"/>
+            <TextBlock x:Name="HomeBrand" Text="GitNebula" FontSize="38" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,0,0,24"/>
             <Button Content="詳細設定" FontSize="17" Tag="settings" Click="Navigate_Click" HorizontalAlignment="Center" Style="{StaticResource PrimaryButton}"/>
           </StackPanel>
         </ScrollViewer>
@@ -44,7 +48,7 @@
         <StackPanel Grid.Row="1" x:Name="TaskPanel" VerticalAlignment="Top">
           <Border x:Name="RemotePanel" Style="{StaticResource Panel}"><StackPanel><TextBlock Text="リモート"/><ComboBox x:Name="RemoteChoice" Margin="0,10" SelectionChanged="Remote_Changed"/><TextBlock x:Name="RemoteTarget" TextWrapping="Wrap" Margin="0,8"/><TextBlock x:Name="RemoteNotice" Text="リモートが未設定です。「リモートを設定」から送受信先を登録してください。" TextWrapping="Wrap" Foreground="#FFBE90"/><Button Content="リモートを設定" Tag="remotes" Click="Navigate_Click" HorizontalAlignment="Left"/><Button x:Name="ExecuteButton" Click="Execute_Click" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Left"/></StackPanel></Border>
           <Border x:Name="RemoteResultPanel" Style="{StaticResource Panel}" Margin="0,12"><StackPanel><TextBlock x:Name="RemoteResult" TextWrapping="Wrap" FontWeight="SemiBold"/><Expander Header="Git 出力"><TextBox x:Name="RemoteOutput" IsReadOnly="True" MaxHeight="200" TextWrapping="Wrap"/></Expander></StackPanel></Border>
-          <StackPanel x:Name="BranchPanel"><TextBlock Text="対象のブランチ"/><ComboBox x:Name="BranchChoice" Margin="0,8" SelectionChanged="Branch_Changed"/><TextBlock x:Name="BranchNotice" TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" Margin="0,8"/><Button x:Name="SwitchButton" Content="選択したブランチに切り替え" Click="Switch_Click" HorizontalAlignment="Left"/>
+          <StackPanel x:Name="BranchPanel"><TextBlock Text="対象のブランチ"/><ComboBox x:Name="BranchChoice" Margin="0,8" DisplayMemberPath="DisplayName" SelectionChanged="Branch_Changed"/><Button x:Name="FetchBranchesButton" Content="リモートから更新" Click="FetchBranches_Click" HorizontalAlignment="Left"/><TextBlock x:Name="BranchNotice" TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" Margin="0,8"/><Button x:Name="SwitchButton" Content="選択したブランチに切り替え" Click="Switch_Click" HorizontalAlignment="Left"/>
             <WrapPanel x:Name="AdvancedBranches"><Button Content="作成" Click="CreateBranch_Click"/><Button Content="名前変更" Click="RenameBranch_Click"/><Button Content="削除" Click="DeleteBranch_Click"/><Button Content="現在のブランチにマージ" Click="Merge_Click"/></WrapPanel>
             <Button x:Name="IntegrateButton" Click="Integrate_Click" HorizontalAlignment="Left" Style="{StaticResource PrimaryButton}"/>
           </StackPanel>
@@ -62,21 +66,35 @@
         <Border Grid.Row="1" x:Name="FilePanel" Style="{StaticResource Panel}">
           <DockPanel>
             <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10"><TextBlock x:Name="FileCount" VerticalAlignment="Center" FontWeight="SemiBold"/><WrapPanel x:Name="SelectionButtons" HorizontalAlignment="Right"><Button Content="すべて選択" Click="SelectAll_Click"/><Button Content="選択解除" Click="SelectNone_Click"/></WrapPanel></DockPanel>
-            <StackPanel DockPanel.Dock="Top" x:Name="StageButtons" Orientation="Horizontal"><Button x:Name="StageButton" Content="ステージ（Add）" Click="Stage_Click"/><Button x:Name="UnstageButton" Content="ステージ解除" Click="Unstage_Click"/></StackPanel>
+            <StackPanel DockPanel.Dock="Top" x:Name="StageButtons" Orientation="Horizontal"><Button x:Name="StageButton" Content="ステージ（Add）" Click="Stage_Click"/><Button x:Name="UnstageButton" Content="ステージ解除" Click="Unstage_Click"/><Button Content="無視（Ignore）" Click="Ignore_Click"/><Button Content="変更を破棄" Click="Discard_Click"/></StackPanel>
             <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="260"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
               <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"><StackPanel x:Name="Files"/></ScrollViewer>
               <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Center" Background="#30264E"/>
-              <TextBox Grid.Column="2" x:Name="DiffView" IsReadOnly="True" FontFamily="Consolas" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"/>
+              <TabControl Grid.Column="2"><TabItem Header="ファイル比較"><local:DiffComparisonView x:Name="WorkingComparison"/></TabItem><TabItem Header="Git 出力"><TextBox x:Name="DiffView" IsReadOnly="True" FontFamily="Consolas" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"/></TabItem></TabControl>
             </Grid>
           </DockPanel>
         </Border>
         <Grid Grid.Row="1" x:Name="HistoryPanel">
-          <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-          <ListView x:Name="CommitList" SelectionChanged="Commit_Changed" Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource TextBrush}"><ListView.View><GridView><GridViewColumn Header="ID" DisplayMemberBinding="{Binding ShortId}" Width="90"/><GridViewColumn Header="コミット" DisplayMemberBinding="{Binding Subject}" Width="340"/><GridViewColumn Header="作成者" DisplayMemberBinding="{Binding Author}" Width="130"/></GridView></ListView.View></ListView>
-          <StackPanel Grid.Row="1"><TextBlock x:Name="HistoryNotice" TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}" Margin="0,8"/><WrapPanel><Button x:Name="CherryPickButton" Content="この変更を取り込む（Cherry-pick）" Click="CherryPick_Click"/><Button x:Name="RevertButton" Content="このコミットを取り消す（Revert）" Click="Revert_Click"/></WrapPanel></StackPanel>
-          <TextBox Grid.Row="2" x:Name="History" IsReadOnly="True" FontFamily="Consolas" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"/>
+          <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*" MinHeight="56"/><RowDefinition Height="Auto"/><RowDefinition Height="6"/><RowDefinition Height="2*" MinHeight="140"/></Grid.RowDefinitions>
+          <DockPanel><ComboBox x:Name="HistoryBranchFilter" DockPanel.Dock="Left" Width="160" DisplayMemberPath="DisplayName" SelectionChanged="HistoryBranch_Changed"/><Button DockPanel.Dock="Right" Content="さらに 200 件読み込む" Click="HistoryMore_Click"/><TextBox x:Name="HistorySearch" TextChanged="HistorySearch_Changed" ToolTip="コミット ID・メッセージ・作成者を検索"/></DockPanel>
+          <ListView Grid.Row="1" x:Name="CommitList" SelectionChanged="Commit_Changed" Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource TextBrush}"><ListView.View><GridView><GridViewColumn Header="ID" DisplayMemberBinding="{Binding Id}" Width="340"/><GridViewColumn Header="コミット" DisplayMemberBinding="{Binding Subject}" Width="340"/><GridViewColumn Header="作成者" DisplayMemberBinding="{Binding Author}" Width="130"/></GridView></ListView.View></ListView>
+          <StackPanel Grid.Row="2">
+            <ScrollViewer x:Name="HistoryNoticePanel" MaxHeight="24" Margin="0,4" VerticalScrollBarVisibility="Auto"><TextBlock x:Name="HistoryNotice" TextWrapping="Wrap" Foreground="{DynamicResource MutedBrush}"/></ScrollViewer>
+            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+              <Button x:Name="CherryPickButton" Content="この変更を取り込む（Cherry-pick）" Click="CherryPick_Click" Padding="8,3"><Button.ContentTemplate><DataTemplate><TextBlock Text="{Binding}" TextWrapping="Wrap" TextAlignment="Center"/></DataTemplate></Button.ContentTemplate></Button>
+              <Button Grid.Column="1" x:Name="RevertButton" Content="このコミットを取り消す（Revert）" Click="Revert_Click" Padding="8,3"><Button.ContentTemplate><DataTemplate><TextBlock Text="{Binding}" TextWrapping="Wrap" TextAlignment="Center"/></DataTemplate></Button.ContentTemplate></Button>
+            </Grid>
+          </StackPanel>
+          <GridSplitter Grid.Row="3" Height="4" HorizontalAlignment="Stretch" ResizeDirection="Rows"/><TabControl Grid.Row="4"><TabItem Header="コミット情報"><local:CommitDetailsView x:Name="HistoryCommitDetails"/></TabItem><TabItem Header="変更ファイル"><local:RevisionBrowser x:Name="HistoryFiles"/></TabItem><TabItem Header="Git 出力"><TextBox x:Name="History" IsReadOnly="True" FontFamily="Consolas" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"/></TabItem></TabControl>
         </Grid>
-        <Grid Grid.Row="1" x:Name="GraphPanel"><Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="160"/></Grid.RowDefinitions><ListBox x:Name="GraphList" SelectionChanged="Graph_Changed" ScrollViewer.HorizontalScrollBarVisibility="Auto"/><Button Grid.Row="1" Content="さらに読み込む" Click="GraphMore_Click" HorizontalAlignment="Right"/><TextBox Grid.Row="2" x:Name="GraphDetails" IsReadOnly="True" FontFamily="Consolas" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"/></Grid>
+        <Grid Grid.Row="1" x:Name="GraphPanel">
+          <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*" MinHeight="80"/><RowDefinition Height="6"/><RowDefinition Height="2*" MinHeight="140"/></Grid.RowDefinitions>
+          <DockPanel><ComboBox x:Name="GraphMode" Width="140" SelectionChanged="GraphMode_Changed"><ComboBoxItem Content="通常" Tag="normal"/><ComboBoxItem Content="4D" Tag="4d"/></ComboBox><Button Content="さらに読み込む" Click="GraphMore_Click" HorizontalAlignment="Right"/></DockPanel>
+          <ListBox Grid.Row="1" x:Name="GraphList" SelectionChanged="Graph_Changed" ScrollViewer.HorizontalScrollBarVisibility="Auto"/>
+          <local:NebulaGraphView Grid.Row="1" x:Name="Graph4D"/>
+          <GridSplitter Grid.Row="2" Height="4" HorizontalAlignment="Stretch" ResizeDirection="Rows"/>
+          <TabControl Grid.Row="3"><TabItem Header="コミット情報"><local:CommitDetailsView x:Name="GraphCommitDetails"/></TabItem><TabItem Header="変更ファイル"><local:RevisionBrowser x:Name="GraphFiles"/></TabItem><TabItem Header="Git 出力"><TextBox x:Name="GraphDetails" IsReadOnly="True" FontFamily="Consolas" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"/></TabItem></TabControl>
+        </Grid>
         <StackPanel Grid.Row="1" x:Name="StashPanel">
           <TextBlock Text="退避メモ"/><TextBox x:Name="StashMessage" Margin="0,8"/>
           <CheckBox x:Name="IncludeUntracked" Content="未追跡ファイルも退避する（無視ファイルは含めない）" IsChecked="True" Checked="StashOption_Changed" Unchecked="StashOption_Changed" Foreground="{DynamicResource TextBrush}"/>

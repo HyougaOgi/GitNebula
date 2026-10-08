@@ -10,18 +10,18 @@ public record RemoteOperationReport(string Action, string Remote, string Branch,
 }
 public sealed partial class GitRepository
 {
-    public async Task<RemoteOperationReport> Transfer(string action, string remote)
+    public async Task<RemoteOperationReport> Transfer(string action, string remote, Action<TransferProgress>? progress = null, bool allBranches = false)
     {
         remote = await Remote(remote); var branch = await Branch(); var before = await HeadRevision(); string[] arguments;
         switch (action) {
-            case "pull": await RequireClean(); arguments = ["pull", "--ff-only", remote, await RemoteBranch(remote)]; break;
+            case "pull": await RequireClean(); arguments = ["pull", "--progress", "--ff-only", remote, await RemoteBranch(remote)]; break;
             case "push":
                 if (before == null) throw new InvalidOperationException(Localization.Text("Push する前に最初のコミットを作成してください。"));
-                arguments = ["push", "--set-upstream", remote, "HEAD:" + await RemoteBranch(remote)]; break;
-            case "fetch": arguments = ["fetch", "--prune", remote]; break;
+                arguments = ["push", "--progress", "--set-upstream", remote, "HEAD:" + await RemoteBranch(remote)]; break;
+            case "fetch": arguments = allBranches ? ["fetch", "--progress", "--prune", remote, "+refs/heads/*:refs/remotes/" + remote + "/*"] : ["fetch", "--progress", "--prune", remote]; break;
             default: throw new ArgumentException("Unknown transfer action", nameof(action));
         }
-        var result = await GitProcess.RunWithOutput(Path, arguments, [0]); var after = await HeadRevision();
+        var result = await GitProcess.RunWithOutput(Path, arguments, [0], progress); var after = await HeadRevision();
         var changed = action == "pull" && before != after && before != null && after != null;
         var count = changed ? int.Parse((await Run("rev-list", "--count", before + ".." + after, "--")).Trim()) : 0;
         var files = changed ? (await Run("diff", "--name-only", "-z", before!, after!, "--")).Split('\0', StringSplitOptions.RemoveEmptyEntries) : [];

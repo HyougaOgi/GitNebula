@@ -16,8 +16,14 @@ $actions = [ordered]@{
     'files' = '作業ファイルの管理…'
     'log' = '履歴…'
     'graph' = 'Git グラフ…'
+    'compare' = 'コミットを比較…'
+    'file-history' = 'ファイルの履歴…'
+    'blame' = 'Blame…'
+    'reflog' = 'Reflog…'
     'cherry-pick' = 'Cherry-pick…'
     'revert' = 'Revert…'
+    'reset' = 'Reset…'
+    'patch' = 'パッチ…'
     'switch' = 'ブランチを切り替え…'
     'merge' = 'Merge…'
     'rebase' = 'Rebase…'
@@ -28,18 +34,28 @@ $actions = [ordered]@{
     'pull' = 'Pull…'
     'push' = 'Push…'
     'remotes' = 'リモートを設定…'
-    'clone' = 'Clone…'
+    'clone' = 'この階層に Clone…'
+    'init' = 'リポジトリを作成（Init）…'
     'workspace' = 'リポジトリの管理…'
     'identity' = 'コミット作成者の設定…'
+    'worktrees' = 'Worktree…'
+    'submodules' = 'Submodule…'
 }
-$groupEnds = @('files', 'revert', 'tags', 'remotes')
+$groupEnds = @('files', 'patch', 'tags', 'remotes')
 if (-not $Uninstall -and -not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'The GitNebula executable does not exist.' }
 foreach ($entry in $entries.GetEnumerator()) {
     # Replace the previous single-command registration on upgrades as well.
-    if (Test-Path -LiteralPath $entry.Key) { Remove-Item -LiteralPath $entry.Key -Recurse -Force }
+    $functions = $entry.Key + 'Functions'
+    foreach ($owned in @($entry.Key, $functions)) { if (Test-Path -LiteralPath $owned) { Remove-Item -LiteralPath $owned -Recurse -Force } }
     if ($Uninstall) { continue }
+    $target = if ($entry.Key.Contains('\Classes\*\')) { $entry.Value } else { $entry.Value + '\.' }
+    New-Item -Path ($entry.Key + '\command') -Force | Out-Null
+    Set-Item -LiteralPath $entry.Key -Value 'GitNebula'
+    New-ItemProperty -LiteralPath $entry.Key -Name 'Icon' -Value $exe -PropertyType String -Force | Out-Null
+    Set-Item -LiteralPath ($entry.Key + '\command') -Value ('"' + $exe + '" --action menu --path "' + $target + '"')
+    $entry = @{ Key = $functions; Value = $entry.Value }
     New-Item -Path $entry.Key -Force | Out-Null
-    New-ItemProperty -LiteralPath $entry.Key -Name 'MUIVerb' -Value 'GitNebula' -PropertyType String -Force | Out-Null
+    New-ItemProperty -LiteralPath $entry.Key -Name 'MUIVerb' -Value 'GitNebula の機能' -PropertyType String -Force | Out-Null
     New-ItemProperty -LiteralPath $entry.Key -Name 'Icon' -Value $exe -PropertyType String -Force | Out-Null
     New-ItemProperty -LiteralPath $entry.Key -Name 'SubCommands' -Value '' -PropertyType String -Force | Out-Null
     New-ItemProperty -LiteralPath $entry.Key -Name 'MultiSelectModel' -Value 'Single' -PropertyType String -Force | Out-Null
@@ -52,7 +68,7 @@ foreach ($entry in $entries.GetEnumerator()) {
         # A single Explorer selection per dialog; folders include their descendants.
         New-ItemProperty -LiteralPath $verb -Name 'MultiSelectModel' -Value 'Single' -PropertyType String -Force | Out-Null
         # Append \. for directories so a drive root's trailing slash cannot escape the quote.
-        $target = if ($entry.Key.Contains('\Classes\*\')) { $entry.Value } else { $entry.Value + '\.' }
+        $target = if ($entry.Key.Contains('\Classes\*\')) { $entry.Value } elseif ($action.Key -eq 'clone' -and -not $entry.Key.Contains('\Background\')) { $entry.Value + '\..' } else { $entry.Value + '\.' }
         Set-Item -LiteralPath ($verb + '\command') -Value ('"' + $exe + '" --action ' + $action.Key + ' --path "' + $target + '"')
         $index++
     }

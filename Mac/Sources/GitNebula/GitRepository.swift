@@ -167,8 +167,33 @@ struct GitRepository: Sendable {
     func createBranch(_ name: String) throws { try requireClean(); _ = try run(["switch", "-c", validateBranch(name)]) }
     func switchBranch(_ name: String) throws {
         try requireClean()
-        guard try branches().contains(name) else { throw failure(L("ローカルブランチを選択してください")) }
-        _ = try run(["switch", "--", validateBranch(name)])
+        let locals = try branches()
+        if locals.contains(name) {
+            _ = try run(["switch", "--", validateBranch(name)]); return
+        }
+        guard let record = try branchRecords(includeRemote: true).first(where: { $0.remote && ($0.id == name || $0.name == name) }) else {
+            throw failure(L("一覧から切り替え先のブランチを選択してください。"))
+        }
+        let local = try validateBranch(record.localName)
+        guard !locals.contains(local) else {
+            throw failure(L("ローカルブランチ「\(local)」は既に存在します。一覧からそのローカルブランチを選択してください。"))
+        }
+        let key = "remote." + record.remotePrefix + ".fetch"
+        let specs = String(decoding: try runData(["config", "--get-all", key], accepting: [0, 1]), as: UTF8.self).split(separator: "\n")
+        let tracks = specs.contains { spec in
+            let parts = spec.split(separator: ":", maxSplits: 1)
+            guard parts.count == 2 else { return false }
+            let destination = String(parts[1])
+            guard let star = destination.firstIndex(of: "*") else { return destination == record.id }
+            let prefix = String(destination[..<star]), suffix = String(destination[destination.index(after: star)...])
+            return record.id.hasPrefix(prefix) && record.id.hasSuffix(suffix) && record.id.count >= prefix.count + suffix.count
+        }
+        if !tracks {
+            // A single-branch clone must fetch this branch on future Pull/Fetch,
+            // and Git needs that mapping to create its upstream relationship.
+            _ = try run(["config", "--local", "--add", key, "+refs/heads/" + local + ":" + record.id])
+        }
+        _ = try run(["switch", "--track", "-c", local, record.id])
     }
     func renameBranch(_ old: String, _ new: String) throws { try requireIdle(); _ = try run(["branch", "-m", validateBranch(old), validateBranch(new)]) }
     func deleteBranch(_ name: String) throws { try requireIdle(); _ = try run(["branch", "-d", "--", validateBranch(name)]) }

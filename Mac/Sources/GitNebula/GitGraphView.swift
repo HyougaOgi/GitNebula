@@ -79,15 +79,18 @@ struct GraphLaneView: View {
             }.pickerStyle(.segmented).frame(width: 180).accessibilityIdentifier("graphDisplayMode")
             if let error { Text(error).foregroundStyle(.orange) }
             if rows.isEmpty && !loading { Text(L("まだコミットはありません。")) }
-            VSplitView {
+            CommitBrowserPanes {
                 Group {
                     if spatial {
                         if !rows.isEmpty { NebulaGraph4D(rows: rows, selection: $selection) }
                         else { Spacer() }
                     } else { standardGraph }
-                }.frame(minHeight: 250, maxHeight: .infinity)
+                }
+            } detail: {
                 if let commit = selectedCommit {
-                    CommitDetailsView(commit: commit).frame(minHeight: 150, idealHeight: 210, maxHeight: 350)
+                    CommitDetailsView(commit: commit)
+                } else {
+                    Text(L("コミットを選択")).foregroundStyle(.secondary)
                 }
             }
             HStack {

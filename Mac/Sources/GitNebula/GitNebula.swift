@@ -57,7 +57,7 @@ final class Workspace: ObservableObject {
         perform({ try Snapshot(repo) }, apply: apply)
     }
     func request(for action: GitAction) -> LaunchRequest {
-        if action == .push, let repository { return LaunchRequest(action: action, paths: [repository.path]) }
+        if action == .push || request.action == .workspace, let repository { return LaunchRequest(action: action, paths: [repository.path]) }
         let paths = request.paths.isEmpty ? repository.map { [$0.path] } ?? [] : request.paths
         return LaunchRequest(action: action, paths: paths)
     }
@@ -94,7 +94,13 @@ final class Workspace: ObservableObject {
     var canRunRemote: Bool {
         !busy && !chosenRemote.isEmpty && remotes.contains(chosenRemote) && (action == .fetch || head != nil && branch != "detached HEAD" && (action != .pull || changes.isEmpty && sequence == nil && conflicts.isEmpty))
     }
+    var canCommit: Bool {
+        !busy && repository != nil && !selected.intersection(Set(visibleChanges.map(\.path))).isEmpty
+            && !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && sequence == nil && conflicts.isEmpty
+    }
     private var request = LaunchRequest(action: .open, paths: [])
+    var displaysActionMenu: Bool { request.showsActionMenu }
     private var initialSelection = true
     var visibleChanges: [Change] {
         changes.filter { action == .workspace || request.includes($0.path, root: repository?.path ?? "/") }
@@ -103,7 +109,9 @@ final class Workspace: ObservableObject {
         repository = state.repo; if ApplicationDelegate.shared != nil { HomeScreen.remember(state.repo.path) }; changes = state.changes; branch = state.branch; graph = state.graph
         branches = state.branches; remotes = state.remotes; conflicts = state.conflicts; merging = state.merging
         sequence = state.sequence; head = state.head; revisionID = UUID()
-        chosenBranch = branches.contains(chosenBranch) ? chosenBranch : branches.first(where: { $0 != branch }) ?? branch
+        if action != .switchBranch || !chosenBranch.hasPrefix("refs/remotes/") {
+            chosenBranch = branches.contains(chosenBranch) ? chosenBranch : branches.first(where: { $0 != branch }) ?? branch
+        }
         if !remotes.contains(chosenRemote) { chosenRemote = state.preferredRemote }
         if !conflicts.contains(chosenConflict) { chosenConflict = conflicts.first ?? "" }
         let available = Set(visibleChanges.map(\.path))
@@ -231,6 +239,13 @@ final class Workspace: ObservableObject {
         default: break
         }
     }
+    func fetchRemoteBranches() {
+        guard !busy, let repo = repository, !chosenRemote.isEmpty else { return }
+        let remote = chosenRemote, progress = beginTransferProgress()
+        perform({ let report = try repo.transfer(.fetch, remote: remote, allBranches: true, progress: progress); return (try Snapshot.afterOperation(repo), report) }, notifiesChanges: true, message: { $0.1.summary }) {
+            self.apply($0.0)
+        }
+    }
     private func beginTransferProgress() -> @Sendable (GitTransferProgress) -> Void {
         let id = UUID(); transferProgressID = id; transferProgress = .connecting
         return { [weak self] progress in
@@ -284,7 +299,9 @@ struct OperationScreen: View {
                     }
                     VStack(alignment: .leading, spacing: 5) {
                         Label(title, systemImage: model.action.symbol).font(.title2.bold()).lineLimit(1)
-                        Text(hint).font(.callout).foregroundStyle(.secondary).lineLimit(2)
+                        if ![.log, .graph, .cherryPick, .revert].contains(model.action) {
+                            Text(hint).font(.callout).foregroundStyle(.secondary).lineLimit(2)
+                        }
                     }
                     Spacer()
                     if model.repository != nil && page != .settings {
@@ -316,6 +333,7 @@ struct OperationScreen: View {
                 Button(L("このフォルダにリポジトリを作成"), action: model.initializeRepository).buttonStyle(.borderedProminent).disabled(model.repositoryPath.isEmpty)
             }
             else if model.action == .open { launcher }
+            else if page == .repositoryActions { RepositoryActionLauncher() }
             else if model.repository == nil {
                 VStack(spacing: 18) {
                     Image(systemName: "folder.badge.questionmark").font(.system(size: 40)).foregroundStyle(accent)
@@ -352,13 +370,11 @@ struct OperationScreen: View {
                     if model.action == .commit {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(L("コミットメッセージ")).font(.headline)
-                            TextField(L("変更内容を短く説明してください"), text: $model.message).textFieldStyle(.roundedBorder).accessibilityIdentifier("commitMessage")
+                            NativeCommitMessage(text: $model.message).frame(height: 76)
                             HStack {
                                 Text(L("\(model.selected.count) ファイルを選択")).foregroundStyle(.secondary)
                                 Spacer()
-                                Button(L("コミット"), action: model.commit).buttonStyle(.borderedProminent).keyboardShortcut(.return, modifiers: .command)
-                                    .accessibilityIdentifier("executeCommit")
-                                    .disabled(model.selected.isEmpty || model.message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.sequence != nil)
+                                GitOperationButton(title: L("コミット"), identifier: "executeCommit", enabled: model.canCommit, action: model.commit, keyEquivalent: "\r").fixedSize()
                             }
                         }
                     }
@@ -388,7 +404,7 @@ struct OperationScreen: View {
                 }
             }
         }
-        .padding(16).frame(minWidth: 1050, idealWidth: 1220, minHeight: 680)
+        .padding(16).frame(minWidth: WorkspaceWindowLayout.minimum.width, idealWidth: WorkspaceWindowLayout.preferred.width, minHeight: WorkspaceWindowLayout.minimum.height)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(NebulaBackground()).foregroundStyle(.primary).disabled(model.busy).tint(accent)
         .sheet(isPresented: $showEditor) {

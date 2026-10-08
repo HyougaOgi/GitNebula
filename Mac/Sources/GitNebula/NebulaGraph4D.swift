@@ -27,7 +27,7 @@ struct NebulaGraph4D: View {
                     .accessibilityIdentifier("gitGraph4D")
                 if let branch = selectedBranch {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text(branch.title).font(.headline).lineLimit(1)
+                        Text(branch.title).font(.headline).lineLimit(2).textSelection(.enabled).help(branch.title)
                         let visible = Set(rows.suffix(count).map(\.id))
                         let logs = branch.rows.filter { visible.contains($0.id) }
                         Text(L("\(logs.count) コミット")).font(.caption).foregroundStyle(.secondary)
@@ -95,9 +95,31 @@ struct NebulaBranch: Identifiable {
     let id: String
     let color: Int
     let rows: [GraphRow]
+    var names: [String] = []
     var title: String {
-        rows.map(\.commit.decorations).first { !$0.isEmpty && !$0.hasPrefix("tag: ") }?
-            .replacingOccurrences(of: "HEAD -> ", with: "") ?? L("分岐 \(color + 1)")
+        let labels = names.isEmpty ? rows.map { Self.branchNames($0.commit) }.first { !$0.isEmpty } ?? [] : names
+        return labels.isEmpty ? rows.first?.id ?? "" : labels.joined(separator: ", ")
+    }
+    /// Decorations can begin with a tag or contain several aliases for one tip.
+    static func branchNames(_ decorations: String) -> [String] {
+        let refs = decorations.components(separatedBy: ", ")
+        var result: [String] = []
+        for ref in refs.filter({ $0.hasPrefix("HEAD -> ") }) + refs.filter({ !$0.hasPrefix("HEAD -> ") }) {
+            var name = ref.hasPrefix("HEAD -> ") ? String(ref.dropFirst(8)) : ref
+            if name.isEmpty || name == "HEAD" || name.hasPrefix("tag: ") || name.hasPrefix("refs/tags/") { continue }
+            if name.hasPrefix("refs/") && !name.hasPrefix("refs/heads/") && !name.hasPrefix("refs/remotes/") { continue }
+            let local = ref.hasPrefix("HEAD -> ") || name.hasPrefix("refs/heads/")
+            for prefix in ["refs/heads/", "refs/remotes/"] where name.hasPrefix(prefix) { name = String(name.dropFirst(prefix.count)); break }
+            if !local && name.hasSuffix("/HEAD") && name.split(separator: "/").count == 2 { continue }
+            if !result.contains(name) { result.append(name) }
+        }
+        return result
+    }
+    private static func branchNames(_ commit: CommitRecord) -> [String] {
+        guard let actual = commit.branchNames else { return branchNames(commit.decorations) }
+        let head = commit.decorations.components(separatedBy: ", ").first { $0.hasPrefix("HEAD -> ") }.map { String($0.dropFirst(8)) }
+        if let head, actual.contains(head) { return [head] + actual.filter { $0 != head } }
+        return actual
     }
     static func radius(_ count: Int) -> Float { 0.22 + 0.16 * sqrt(Float(count)) }
     static func group(_ rows: [GraphRow]) -> [NebulaBranch] {
@@ -105,7 +127,7 @@ struct NebulaBranch: Identifiable {
         func priority(_ row: GraphRow) -> Int {
             let refs = row.commit.decorations
             if refs.contains("HEAD -> ") || refs == "HEAD" { return 0 }
-            if refs.components(separatedBy: ", ").contains(where: { !$0.isEmpty && !$0.hasPrefix("tag: ") }) { return 1 }
+            if !branchNames(row.commit).isEmpty { return 1 }
             return 2
         }
         let roots = rows.enumerated().sorted {
@@ -121,6 +143,27 @@ struct NebulaBranch: Identifiable {
             }
             let index = branches.count
             branches.append(NebulaBranch(id: String(index), color: index, rows: rows.filter { ids.contains($0.id) }))
+        }
+        let names = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, branchNames($0.commit)) })
+        var children: [String: [String]] = [:]
+        for row in rows { for parent in row.commit.parents { children[parent, default: []].append(row.id) } }
+        for index in branches.indices {
+            if let direct = branches[index].rows.map({ names[$0.id] ?? [] }).first(where: { !$0.isEmpty }) {
+                branches[index].names = direct
+                continue
+            }
+            // A merged lineage can outlive its branch ref. Label it with the
+            // nearest surviving branch containing its tip, using real parent edges.
+            var frontier = branches[index].rows.first.map { [$0.id] } ?? [], visited = Set(frontier)
+            while !frontier.isEmpty {
+                var labels: [String] = [], next: [String] = []
+                for id in frontier {
+                    for name in names[id] ?? [] where !labels.contains(name) { labels.append(name) }
+                    for child in children[id] ?? [] where visited.insert(child).inserted { next.append(child) }
+                }
+                if !labels.isEmpty { branches[index].names = labels; break }
+                frontier = next
+            }
         }
         return branches
     }
@@ -287,7 +330,7 @@ struct NebulaGraphScene: NSViewRepresentable {
         private var lastReset = 0
         private(set) var scene = SCNScene()
         func update(_ view: GraphView, rows: [GraphRow], count: Int, selection: String?, reset: Int) {
-            let ids = rows.map(\.id)
+            let ids = rows.map { $0.id + " " + $0.commit.decorations + " " + ($0.commit.branchNames ?? []).joined(separator: ", ") }
             if ids != signature || view.scene == nil {
                 signature = ids; build(rows)
                 view.scene = scene; view.resetCamera(camera, radius: radius)

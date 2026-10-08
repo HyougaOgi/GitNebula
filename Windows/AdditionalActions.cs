@@ -8,12 +8,12 @@ public partial class MainWindow
     {
         if (busy) homeRequested = true;
         else if (action != "open") Navigate("open");
-        Show(); WindowState = WindowState.Normal; Activate();
+        Show(); if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal; Activate();
     }
     public async Task ShowRequest(LaunchRequest value)
     {
         initialRequestHandled = true;
-        Show(); WindowState = WindowState.Normal; Activate();
+        Show(); if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal; Activate();
         while (busy) await Task.Delay(50);
         if (value.Action == "open" && value.Paths.Length == 0) { ShowHome(); return; }
         if (value.Action != action || value.Paths.Length > 0) CaptureRoute();
@@ -22,7 +22,7 @@ public partial class MainWindow
             if (repository != null) drafts[repository.Path] = Message.Text;
             request = value.Paths.Length == 0 && repository != null ? new LaunchRequest(value.Action, request.Paths) : value;
             if (value.Action == "clone" && value.Paths.Length > 0) CloneParent.Text = LaunchRequest.DirectoryFor(value.Paths[0]);
-            var opensRepository = value.Action is not ("clone" or "settings") && value.Paths.Length > 0;
+            var opensRepository = value.Action is not ("clone" or "init" or "settings") && value.Paths.Length > 0;
             if (opensRepository) { repository = null; hasHead = false; sequence = null; merging = false; initialSelection = true; selected.Clear(); Message.Clear(); }
             SetAction(value.Action);
             if (opensRepository) {
@@ -37,11 +37,14 @@ public partial class MainWindow
     private async Task RefreshActionData()
     {
         if (repository == null) return;
-        if (action == "graph") { RenderGraph(GraphLayout.Rows(await Repo.History(true, graphLimit))); if (GraphList.SelectedItem is ListBoxItem graph && graph.Tag is string graphId) GraphDetails.Text = await Repo.ShowCommit(graphId); }
+        if (action == "graph") { RenderGraph(GraphLayout.Rows(await Repo.History(true, graphLimit))); if (GraphList.SelectedItem is ListBoxItem graph && graph.Tag is CommitRecord graphRecord) GraphDetails.Text = await Repo.ShowCommit(graphRecord.Id); }
         else if (action is "log" or "cherry-pick" or "revert") {
-            var id = (CommitList.SelectedItem as CommitRecord)?.Id;
-            var commits = await Repo.History(); CommitList.ItemsSource = commits;
-            CommitList.SelectedItem = commits.FirstOrDefault(c => c.Id == id) ?? commits.FirstOrDefault();
+            var reference = (HistoryBranchFilter.SelectedItem as BranchRecord)?.Id ?? "";
+            var refs = new[] { new BranchRecord("", Localization.Text("すべてのブランチ"), "", ""), new BranchRecord("HEAD", "HEAD", "", "") }.Concat(await Repo.BranchRecords(true)).ToArray();
+            HistoryBranchFilter.ItemsSource = refs; HistoryBranchFilter.SelectedItem = refs.FirstOrDefault(b => b.Id == reference) ?? refs[0];
+            historyRecords = await Repo.History(limit: historyLimit, reference: reference.Length == 0 ? null : reference); FilterHistory();
+            HistoryCommitDetails.SetRecord(CommitList.SelectedItem as CommitRecord);
+            await HistoryFiles.SetCommit(Repo, CommitList.SelectedItem as CommitRecord);
             if (CommitList.SelectedItem is CommitRecord commit) History.Text = await Repo.ShowCommit(commit.Id);
             else History.Text = Localization.Text("まだコミットはありません。");
         } else if (action == "stash") {
@@ -55,11 +58,14 @@ public partial class MainWindow
             IdentityName.Text = await Repo.Configuration("user.name") ?? "";
             IdentityEmail.Text = await Repo.Configuration("user.email") ?? "";
         }
+        await RefreshAdvancedData();
         if (action is "push" or "pull" or "fetch") await UpdateRemoteTarget();
     }
     private async void Commit_Changed(object sender, SelectionChangedEventArgs e)
     {
         Controls();
+        HistoryCommitDetails.SetRecord(CommitList.SelectedItem as CommitRecord);
+        if (!busy) await HistoryFiles.SetCommit(Repo, CommitList.SelectedItem as CommitRecord);
         if (busy || CommitList.SelectedItem is not CommitRecord commit) return;
         await Act(async () => History.Text = await Repo.ShowCommit(commit.Id));
     }

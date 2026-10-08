@@ -27,6 +27,22 @@ import XCTest
         navigation.installRoot(model, close: nil)
         return navigation
     }
+    func testDirectFinderRootOpensChooserAndCommitsFromWholeRepository() async throws {
+        let (root, repo) = try fixture(), navigation = launcher()
+        let request = LaunchRequest(action: .workspace, paths: [root.appendingPathComponent("file.txt").path], showsActionMenu: true)
+        navigation.openRequest(try LaunchRequest.parse(request.url()))
+        try await wait(navigation)
+        XCTAssertEqual(navigation.current?.title, L("Git 操作"))
+        XCTAssertTrue(navigation.current?.model?.displaysActionMenu == true)
+        navigation.openAction(.commit); try await wait(navigation)
+        let model = try XCTUnwrap(navigation.current?.model)
+        XCTAssertEqual(Set(model.visibleChanges.map(\.path)), ["file.txt", "other.txt"])
+        model.selected = ["file.txt"]; model.message = "chooser commit\n\nfull body"
+        XCTAssertTrue(model.canCommit); model.commit(); try await wait(navigation)
+        XCTAssertTrue(model.commitCompleted)
+        XCTAssertEqual(try repo.history(limit: 1).first?.subject, "chooser commit")
+        XCTAssertEqual(try repo.changes().map(\.path), ["other.txt"])
+    }
     func testFinderBackShowsRepositoryActionsAndUsesWholeRepository() async throws {
         let (root, repo) = try fixture(), head = try repo.headRevision(), changes = try repo.changes()
         let navigation = launcher()

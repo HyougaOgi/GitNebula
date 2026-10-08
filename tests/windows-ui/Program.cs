@@ -1,6 +1,8 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Automation;
 using GitNebula;
 
 internal static class Program
@@ -26,8 +28,8 @@ internal static class Program
                 async Task Wait()
                 {
                     var deadline = DateTime.UtcNow.AddSeconds(20);
-                    do { await Task.Delay(30); } while (Find<ProgressBar>("Progress").Visibility == Visibility.Visible && DateTime.UtcNow < deadline);
-                    Check(Find<ProgressBar>("Progress").Visibility != Visibility.Visible, "operation timed out");
+                    do { await Task.Delay(30); } while (window.IsBusy && DateTime.UtcNow < deadline);
+                    Check(!window.IsBusy, "operation timed out");
                 }
                 await Wait();
                 Check(Find<ScrollViewer>("HomePanel").IsVisible && !Find<Border>("FilePanel").IsVisible, "normal startup displays home without diff");
@@ -65,7 +67,45 @@ internal static class Program
                 var choices = Find<ComboBox>("OtherActions");
                 choices.SelectedItem = choices.Items.Cast<ComboBoxItem>().Single(i => (string)i.Tag == "log");
                 await Wait();
-                Check(Find<TextBox>("History").IsVisible && !Find<StackPanel>("CommitPanel").IsVisible, "history mode");
+                Check(Find<CommitDetailsView>("HistoryCommitDetails").IsVisible && !Find<StackPanel>("CommitPanel").IsVisible, "history mode");
+                var details = Find<CommitDetailsView>("HistoryCommitDetails");
+                var record = details.Record!;
+                Check(record.Id == await repo.Revision("HEAD") && record.Id.Length == 40 && record.Message == "context commit\n", "selected commit retains full ID and body");
+                FrameworkElement Field(string id) => Descendants(details).OfType<FrameworkElement>().Single(w => AutomationProperties.GetAutomationId(w) == id);
+                Check(((TextBox)Field("commitField:id")).Text == record.Id, "native full ID is displayed");
+                foreach (var (id, expected) in new[] { ("id", record.Id), ("message", record.Message), ("all", record.DetailsText) }) {
+                    ((Button)Field("copyCommit:" + id)).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    Check(Clipboard.GetText() == expected, "native " + id + " copy");
+                }
+                foreach (var field in record.DetailFields.Where(f => f.Id != "id")) {
+                    ((Button)Field("copyCommitField:" + field.Id)).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    Check(Clipboard.GetText() == field.Value, "native individual field copy: " + field.Id);
+                }
+                var longRecord = record with { Message = string.Join("\n", Enumerable.Range(0, 100).Select(i => "Complete message line " + i)) };
+                details.SetRecord(longRecord);
+                Find<TextBlock>("Status").Text = string.Join("\n", Enumerable.Range(0, 100).Select(i => "Long operation result " + i));
+                Find<TextBlock>("Location").Text = string.Join("/", Enumerable.Repeat("long repository directory", 30));
+                foreach (var (width, height) in new[] { (1100d, 900d), (850d, 600d), (700d, 600d), (1000d, 700d), (850d, 600d) }) {
+                    window.Width = width; window.Height = height; window.UpdateLayout(); await Task.Delay(100);
+                    var detailScroll = (ScrollViewer)Field("commitDetailsScroll");
+                    Check(detailScroll.ViewportHeight >= 24 && detailScroll.ScrollableHeight > 0 && detailScroll.ActualHeight <= details.ActualHeight, "normal window keeps a readable bounded detail body");
+                    var workspace = Find<DockPanel>("Workspace");
+                    var frame = details.TransformToAncestor(workspace).TransformBounds(new Rect(details.RenderSize));
+                    Check(frame.Top >= -1 && frame.Bottom <= workspace.ActualHeight + 1 && frame.Left >= -1 && frame.Right <= workspace.ActualWidth + 1, "whole inspector stays inside the normal window despite long paths/results");
+                    detailScroll.ScrollToBottom(); window.UpdateLayout(); await Task.Delay(50);
+                    var tree = (TextBox)Field("commitField:tree");
+                    var bottom = tree.TransformToAncestor(detailScroll).Transform(new Point(0, tree.ActualHeight));
+                    Check(bottom.Y <= detailScroll.ActualHeight + 1 && bottom.Y > 0, "last commit field is reachable without maximizing");
+                }
+                details.SetRecord(record);
+                await window.ShowRequest(new LaunchRequest("menu", [root])); await Wait();
+                Check(Find<ScrollViewer>("RepositoryActionsPanel").IsVisible && !Find<Border>("FilePanel").IsVisible, "direct GitNebula request shows repository chooser");
+                await repo.Run("branch", "other-branch");
+                await window.ShowRequest(new LaunchRequest("switch", [root])); await Wait();
+                Check(Find<ComboBox>("BranchChoice").Items.Cast<BranchRecord>().Any(b => b.Name == "other-branch"), "native branch selector includes other branches");
+                await window.ShowRequest(new LaunchRequest("log", [root])); await Wait();
+                choices = Find<ComboBox>("OtherActions");
+
                 choices.SelectedItem = choices.Items.Cast<ComboBoxItem>().Single(i => (string)i.Tag == "pull");
                 await Wait();
                 Check(Find<Border>("RemotePanel").IsVisible && !Find<Border>("FilePanel").IsVisible, "pull mode");
@@ -75,13 +115,15 @@ internal static class Program
                 Find<Button>("OpenPathButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); await Wait();
                 Check(Find<TextBox>("RepositoryPath").Text == root, "typed path opens repository");
                 var panels = new Dictionary<string, string> {
-                    ["graph"] = "GraphPanel", ["open"] = "HomePanel", ["workspace"] = "ManagementPanel", ["files"] = "FilePanel", ["commit"] = "FilePanel", ["diff"] = "FilePanel",
+                    ["menu"] = "RepositoryActionsPanel", ["init"] = "InitPanel", ["compare"] = "ToolsPanel", ["file-history"] = "ToolsPanel", ["blame"] = "ToolsPanel", ["reflog"] = "ToolsPanel", ["reset"] = "ToolsPanel", ["patch"] = "ToolsPanel", ["worktrees"] = "ToolsPanel", ["submodules"] = "ToolsPanel", ["graph"] = "GraphPanel", ["open"] = "HomePanel", ["workspace"] = "ManagementPanel", ["files"] = "FilePanel", ["commit"] = "FilePanel", ["diff"] = "FilePanel",
                     ["log"] = "HistoryPanel", ["cherry-pick"] = "HistoryPanel", ["revert"] = "HistoryPanel", ["pull"] = "RemotePanel", ["push"] = "RemotePanel", ["fetch"] = "RemotePanel",
                     ["switch"] = "BranchPanel", ["branches"] = "BranchPanel", ["merge"] = "BranchPanel", ["rebase"] = "BranchPanel",
                     ["clone"] = "ClonePanel", ["stash"] = "StashPanel", ["tags"] = "TagsPanel", ["remotes"] = "RemoteSettingsPanel", ["identity"] = "IdentityPanel", ["settings"] = "SettingsPanel", ["conflicts"] = "ConflictPanel"
                 };
                 foreach (var (action, expectedPanel) in panels) {
-                    choices.SelectedItem = choices.Items.Cast<ComboBoxItem>().Single(i => (string)i.Tag == action); await Wait();
+                    if (action == "menu") await window.ShowRequest(new LaunchRequest("menu", [root]));
+                    else choices.SelectedItem = choices.Items.Cast<ComboBoxItem>().Single(i => (string)i.Tag == action);
+                    await Wait();
                     foreach (var panel in panels.Values.Distinct()) Check(Find<FrameworkElement>(panel).IsVisible == (panel == expectedPanel), $"{action}: exclusive {panel}");
                     Check(Find<StackPanel>("CommitPanel").IsVisible == (action == "commit"), $"{action}: commit form visibility");
                     if (action is "log" or "cherry-pick" or "revert") {
@@ -135,14 +177,49 @@ internal static class Program
                 Find<ComboBox>("LanguageChoice").SelectedIndex = 1;
                 Check(AppSettings.Current.Theme == "light" && AppSettings.Current.Language == "en" && Math.Abs(window.Opacity - .6) < .001, "appearance controls apply and persist");
                 Check(Find<Button>("BackButton").Content as string == "Back", "language changes apply immediately");
+                var router = typeof(GitNebula.App).GetMethod("OpenRequest", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+                async Task OpenAppRequest(string action) {
+                    await (Task)router.Invoke(app, [window, new LaunchRequest(action, [root])])!;
+                    var deadline = DateTime.UtcNow.AddSeconds(20);
+                    while (app.Windows.OfType<MainWindow>().Any(w => w.IsBusy) && DateTime.UtcNow < deadline) await Task.Delay(30);
+                    Check(!app.Windows.OfType<MainWindow>().Any(w => w.IsBusy), "window routing operation timed out");
+                }
+                await OpenAppRequest("log");
+                var historyWindow = app.Windows.OfType<MainWindow>().Single(w => ((Grid)w.FindName("HistoryPanel")).IsVisible);
+                var historyWidth = historyWindow.Width;
+                await OpenAppRequest("graph");
+                var graphWindow = app.Windows.OfType<MainWindow>().Single(w => ((Grid)w.FindName("GraphPanel")).IsVisible);
+                Check(historyWindow != graphWindow && historyWindow != window && graphWindow != window, "history, graph and work use independent windows");
+                ((ComboBox)graphWindow.FindName("GraphMode")).SelectedIndex = 1;
+                var graph4D = (NebulaGraphView)graphWindow.FindName("Graph4D");
+                var space = typeof(NebulaGraphView).GetField("space", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(graph4D)!;
+                var camera = (OrbitCamera)space.GetType().GetProperty("Camera")!.GetValue(space)!;
+                camera.Zoom(-2); camera.Rotate(40, 20);
+                var cameraBefore = (camera.Yaw, camera.Pitch, camera.Scroll, camera.Target, camera.Distance);
+                var graphWidth = graphWindow.Width; var graphHeight = graphWindow.Height;
+                historyWindow.Width = historyWidth + 150; await Task.Delay(60);
+                Check(graphWindow.Width == graphWidth && graphWindow.Height == graphHeight, "history resizing preserves graph size");
+                Check((camera.Yaw, camera.Pitch, camera.Scroll, camera.Target, camera.Distance) == cameraBefore, "history resizing preserves the 4D camera");
+                var totalWindows = app.Windows.Count;
+                var historyChoices = (ComboBox)historyWindow.FindName("OtherActions");
+                historyChoices.SelectedItem = historyChoices.Items.Cast<ComboBoxItem>().Single(i => (string)i.Tag == "graph");
+                await Task.Delay(60); await OpenAppRequest("graph");
+                Check(app.Windows.Count == totalWindows && ((Grid)historyWindow.FindName("HistoryPanel")).IsVisible && graphWindow.Width == graphWidth, "in-app graph navigation reuses its window and retains history");
+                Check((camera.Yaw, camera.Pitch, camera.Scroll, camera.Target, camera.Distance) == cameraBefore, "reopening retains the graph camera");
                 Console.WriteLine("PASS: WPF action routing, selected-file commit, preview, modes and feedback");
             }
             catch (Exception error) { Console.Error.WriteLine(error); code = 1; }
-            finally { window?.Close(); app.Shutdown(); }
+            finally { foreach (var item in app.Windows.OfType<MainWindow>().ToArray()) item.Close(); app.Shutdown(); }
         };
         app.Run();
         foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)) File.SetAttributes(file, FileAttributes.Normal);
         Directory.Delete(root, true); File.Delete(root + ".settings.json"); return code;
+    }
+    private static IEnumerable<DependencyObject> Descendants(DependencyObject root) {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++) {
+            var child = VisualTreeHelper.GetChild(root, i); yield return child;
+            foreach (var descendant in Descendants(child)) yield return descendant;
+        }
     }
     private static void Check(bool condition, string message) { if (!condition) throw new Exception(message); }
 }
