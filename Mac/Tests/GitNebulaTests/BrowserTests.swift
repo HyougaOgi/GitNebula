@@ -376,13 +376,15 @@ final class BrowserTests: LocalizedTestCase {
         XCTAssertEqual(commitModel.message, "retained draft"); XCTAssertEqual(commitModel.selected, ["home.txt"])
         navigation.home(); try await eventually { !model.busy }
         for action in GitAction.allCases.filter({ $0 != .open }) {
+            try await eventually { !navigation.busy }
             navigation.openAction(action)
-            try await eventually { navigation.current?.model?.busy == false }
+            XCTAssertEqual(navigation.current?.model?.action, action, "The requested route must open before checking its content")
+            try await eventually { !navigation.busy }
             try await Task.sleep(nanoseconds: 150_000_000)
             XCTAssertEqual(hosts().first?.subviews.count, 1, action.rawValue)
             if ![GitAction.commit, .diff, .log].contains(action) { XCTAssertTrue(fileTables().isEmpty, action.rawValue) }
             navigation.back()
-            try await eventually { fileTables().isEmpty }
+            try await eventually { !navigation.busy && fileTables().isEmpty }
         }
         // A context-menu request is another route in the same hosting container.
         navigation.openRequest(LaunchRequest(action: .diff, paths: [root.path]))

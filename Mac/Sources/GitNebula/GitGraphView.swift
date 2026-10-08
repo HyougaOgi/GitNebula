@@ -119,7 +119,7 @@ struct GraphLaneView: View {
                         Button { selection = row.id } label: {
                             HStack(spacing: 12) {
                                 GraphLaneView(row: row, columns: columns)
-                                Text(row.commit.shortID).font(.system(.body, design: .monospaced)).foregroundStyle(.secondary).frame(width: 80)
+                                Text(row.commit.id).font(.system(.body, design: .monospaced)).foregroundStyle(.secondary).frame(width: 340, alignment: .leading)
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(row.commit.subject).lineLimit(1)
                                     if !row.commit.decorations.isEmpty { Text(row.commit.decorations).font(.caption).foregroundStyle(.purple).lineLimit(1) }
@@ -133,7 +133,7 @@ struct GraphLaneView: View {
                             .simultaneousGesture(TapGesture(count: 2).onEnded { navigation.openRevision(repo, row.id, false) })
                             .accessibilityIdentifier("graphCommit:" + row.id)
                     }
-                }.frame(width: max(viewport.size.width, CGFloat(columns) * 20 + 760))
+                }.frame(width: max(viewport.size.width, CGFloat(columns) * 20 + 1020))
                     .frame(minHeight: viewport.size.height, alignment: .topLeading)
             }.accessibilityIdentifier("gitGraph")
         }

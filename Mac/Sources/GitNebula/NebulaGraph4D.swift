@@ -37,11 +37,9 @@ struct NebulaGraph4D: View {
                                     Button { selection = row.id } label: {
                                         VStack(alignment: .leading, spacing: 4) {
                                             Text(row.commit.subject).lineLimit(2)
-                                            HStack {
-                                                Text(row.commit.shortID).font(.system(.caption, design: .monospaced))
-                                                Spacer()
-                                                Text(row.commit.displayDate).font(.caption2)
-                                            }.foregroundStyle(.secondary)
+                                            Text(row.commit.id).font(.system(.caption, design: .monospaced))
+                                                .fixedSize(horizontal: false, vertical: true).foregroundStyle(.secondary)
+                                            Text(row.commit.displayDate).font(.caption2).foregroundStyle(.secondary)
                                         }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
                                             .background(selection == row.id ? Color.accentColor.opacity(0.18) : .clear, in: RoundedRectangle(cornerRadius: 6))
                                     }.buttonStyle(.plain).accessibilityIdentifier("graphBranchCommit:" + row.id)

@@ -60,6 +60,8 @@ final class SSHTests: LocalizedTestCase {
         XCTAssertEqual(field.stringValue, SSHSettings.savedMask)
         XCTAssertTrue(window.makeFirstResponder(field))
         let editor = try XCTUnwrap(field.currentEditor() as? NSTextView)
+        XCTAssertEqual(field.stringValue, SSHSettings.savedMask, "Focusing the saved value must keep its masked display")
+        XCTAssertEqual(editor.selectedRange(), NSRange(location: 0, length: SSHSettings.savedMask.utf16.count))
         for (characters, unmodified, code) in [("A", "a", UInt16(0)), ("!", "1", UInt16(18)), ("Z", "z", UInt16(6))] {
             let event = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .shift, timestamp: 0, windowNumber: window.windowNumber, context: nil, characters: characters, charactersIgnoringModifiers: unmodified, isARepeat: false, keyCode: code))
             editor.keyDown(with: event)

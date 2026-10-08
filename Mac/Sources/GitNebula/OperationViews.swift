@@ -66,6 +66,7 @@ struct RemoteOperationView: View {
                     Button(model.action.title, action: model.runAction).buttonStyle(.borderedProminent).controlSize(.large).disabled(!model.canRunRemote).accessibilityIdentifier("executeRemote")
                 }
             }
+            if let progress = model.transferProgress { GitTransferProgressView(progress: progress, busy: model.busy) }
             if let report = model.transferReport {
                 VStack(alignment: .leading, spacing: 8) {
                     Label(report.summary, systemImage: "checkmark.circle.fill").foregroundStyle(.green).accessibilityIdentifier("remoteResult")

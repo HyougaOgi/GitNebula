@@ -13,9 +13,12 @@ struct NativeSecureField: NSViewRepresentable {
         field.isBezeled = true; field.bezelStyle = .roundedBezel
         field.font = .systemFont(ofSize: 13); field.focusRingType = .exterior
         field.delegate = context.coordinator
-        field.beginEditing = { [weak coordinator = context.coordinator, weak field] in
+        field.stringValue = text; context.coordinator.lastValue = text
+        field.didFocus = { [weak coordinator = context.coordinator, weak field] in
             guard coordinator?.parent.showsSavedValue == true else { return }
-            field?.stringValue = ""
+            if let editor = field?.currentEditor() as? NSTextView {
+                editor.setSelectedRange(NSRange(location: 0, length: editor.string.utf16.count))
+            }
         }
         field.setAccessibilityIdentifier("sshPassphrase")
         return field
@@ -44,11 +47,12 @@ struct NativeSecureField: NSViewRepresentable {
         }
     }
     final class SecureTextField: NSSecureTextField {
-        var beginEditing: (() -> Void)?
+        var didFocus: (() -> Void)?
         override func becomeFirstResponder() -> Bool {
-            // Clear the display mask before AppKit creates the editor, not during input.
-            beginEditing?()
-            return super.becomeFirstResponder()
+            let accepted = super.becomeFirstResponder()
+            // Keep the saved mask on focus; native input replaces its selection.
+            if accepted { didFocus?() }
+            return accepted
         }
     }
 }

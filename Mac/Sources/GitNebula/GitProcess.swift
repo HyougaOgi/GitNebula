@@ -15,7 +15,7 @@ struct GitProcess {
     static func run(in path: String, arguments: [String], accepting statuses: Set<Int32> = [0], ssh: SSHConfiguration = .current) throws -> Data {
         try runWithOutput(in: path, arguments: arguments, accepting: statuses, ssh: ssh).data
     }
-    static func runWithOutput(in path: String, arguments: [String], accepting statuses: Set<Int32> = [0], ssh: SSHConfiguration = .current) throws -> Output {
+    static func runWithOutput(in path: String, arguments: [String], accepting statuses: Set<Int32> = [0], ssh: SSHConfiguration = .current, progress: (@Sendable (GitTransferProgress) -> Void)? = nil) throws -> Output {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         var environment = ProcessInfo.processInfo.environment
@@ -37,6 +37,8 @@ struct GitProcess {
         let stdout = try FileHandle(forWritingTo: output), stderr = try FileHandle(forWritingTo: error)
         defer { try? stdout.close(); try? stderr.close() }
         process.standardOutput = stdout; process.standardError = stderr
+        let reader = try progress.map { try GitProgressReader(file: error, report: $0) }
+        defer { reader?.finish() }
         do { try process.run() }
         catch { throw GitRepository(path: path).failure(L("Git を起動できません（\(executable)）。設定で Git の実行ファイルを確認してください。\n\(error.localizedDescription)")) }
         process.waitUntilExit()

@@ -20,7 +20,7 @@ struct CommitOperationView: View {
         VStack(alignment: .leading, spacing: 14) {
             TextField(L("コミットを検索（メッセージ・作成者・ID）"), text: $query).textFieldStyle(.roundedBorder)
             Table(filtered, selection: $selection) {
-                TableColumn("ID", value: \.shortID).width(min: 80, ideal: 95, max: 110)
+                TableColumn("ID") { Text($0.id).font(.system(.caption, design: .monospaced)).textSelection(.enabled) }.width(min: 300, ideal: 340, max: 520)
                 TableColumn(L("コミット"), value: \.subject)
                 TableColumn(L("作成者"), value: \.author).width(min: 110, ideal: 150, max: 200)
                 TableColumn(L("日時"), value: \.displayDate).width(min: 130, ideal: 170, max: 220)

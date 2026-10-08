@@ -647,5 +647,16 @@
   "コピーしました": "Copied",
   "コピーできませんでした。再度お試しください。": "Could not copy. Please try again.",
   "{0}をコピー": "Copy {0}",
-  "実行先: {0}": "Target branch: {0}"
+  "実行先: {0}": "Target branch: {0}",
+  "メッセージをコピー": "Copy Message",
+  "接続中…": "Connecting…",
+  "オブジェクトを確認中": "Counting objects",
+  "オブジェクトを圧縮中": "Compressing objects",
+  "オブジェクトを受信中": "Receiving objects",
+  "オブジェクトを送信中": "Sending objects",
+  "差分を展開中": "Resolving deltas",
+  "ファイルを展開中": "Checking out files",
+  "更新を確認中…": "Checking updates…",
+  "失敗": "Failed",
+  "オブジェクトを展開中": "Unpacking objects"
 }

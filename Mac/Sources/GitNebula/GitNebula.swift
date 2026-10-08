@@ -89,6 +89,8 @@ final class Workspace: ObservableObject {
     @Published var revisionID = UUID()
     @Published var head: String?
     @Published var transferReport: RemoteOperationReport?
+    @Published var transferProgress: GitTransferProgress?
+    private var transferProgressID: UUID?
     var canRunRemote: Bool {
         !busy && !chosenRemote.isEmpty && remotes.contains(chosenRemote) && (action == .fetch || head != nil && branch != "detached HEAD" && (action != .pull || changes.isEmpty && sequence == nil && conflicts.isEmpty))
     }
@@ -110,6 +112,7 @@ final class Workspace: ObservableObject {
     }
     func perform<T: Sendable>(_ work: @escaping @Sendable () throws -> T, success: String = L("準備完了"), notifiesChanges: Bool = false, message: ((T) -> String)? = nil, apply: @escaping (T) -> Void) {
         guard !busy else { return }; busy = true; succeeded = false; failed = false; status = L("処理中…")
+        if transferProgressID == nil { transferProgress = nil }
         Task {
             do {
                 let result = try await Task.detached(priority: .userInitiated) { try work() }.value
@@ -127,6 +130,10 @@ final class Workspace: ObservableObject {
                 if notifiesChanges { notifyRepositoryChanged() }
             }
             busy = false
+            if transferProgressID != nil {
+                transferProgress = failed ? .failed : .completed
+                transferProgressID = nil
+            }
             if isScreenActive { refreshIfNeeded() }
         }
     }
@@ -134,7 +141,7 @@ final class Workspace: ObservableObject {
         guard !busy else { return }
         launchID = UUID(); request = newRequest; action = request.action; initialSelection = true
         repository = nil; changes = []; selected = []; conflicts = []; merging = false; chosenRemote = ""; chosenBranch = ""
-        sequence = nil; head = nil; transferReport = nil
+        sequence = nil; head = nil; transferReport = nil; transferProgress = nil; transferProgressID = nil
         message = ""; status = L("準備完了"); succeeded = false; failed = false; commitCompleted = false; missingRepository = false
         if action == .clone {
             cloneParent = request.paths.first.map(LaunchRequest.directory) ?? NSHomeDirectory()
@@ -181,7 +188,7 @@ final class Workspace: ObservableObject {
         selectAction(.open); refresh()
     }
     func selectAction(_ value: GitAction) {
-        action = value; selected.formIntersection(Set(visibleChanges.map(\.path))); status = L("準備完了"); succeeded = false; failed = false; transferReport = nil; commitCompleted = false
+        action = value; selected.formIntersection(Set(visibleChanges.map(\.path))); status = L("準備完了"); succeeded = false; failed = false; transferReport = nil; transferProgress = nil; commitCompleted = false
         if value == .clone, cloneParent.isEmpty {
             cloneParent = repository?.path ?? NSHomeDirectory()
         }
@@ -207,19 +214,30 @@ final class Workspace: ObservableObject {
         case .pull, .push, .fetch:
             guard let repo = repository else { return }
             let action = action; transferReport = nil
-            perform({ let report = try repo.transfer(action, remote: remote); return (try Snapshot.afterOperation(repo), report) }, notifiesChanges: true, message: { $0.1.summary }) {
+            let progress = beginTransferProgress()
+            perform({ let report = try repo.transfer(action, remote: remote, progress: progress); return (try Snapshot.afterOperation(repo), report) }, notifiesChanges: true, message: { $0.1.summary }) {
                 self.apply($0.0); self.transferReport = $0.1
             }
         case .switchBranch: operation(success: L("ブランチを切り替えました。")) { try $0.switchBranch(name) }
         case .clone:
             let source = cloneSource, parent = cloneParent
+            let progress = beginTransferProgress()
             perform({
                 let destination = try CloneLocation.destination(parent: parent, source: source)
-                return try Snapshot.afterOperation(GitRepository.clone(source, destination))
+                return try Snapshot.afterOperation(GitRepository.clone(source, destination, progress: progress))
             }, success: L("Clone が完了しました。閉じて作業を始められます。")) { state in
                 self.request = LaunchRequest(action: .clone, paths: []); self.initialSelection = true; self.apply(state)
             }
         default: break
+        }
+    }
+    private func beginTransferProgress() -> @Sendable (GitTransferProgress) -> Void {
+        let id = UUID(); transferProgressID = id; transferProgress = .connecting
+        return { [weak self] progress in
+            DispatchQueue.main.async {
+                guard let self, self.transferProgressID == id, self.busy else { return }
+                self.transferProgress = progress
+            }
         }
     }
 }
@@ -410,6 +428,7 @@ struct OperationScreen: View {
             Text(L("実際の作成先: ") + (model.cloneDestination.isEmpty ? L("取得元と保存先を指定してください") : model.cloneDestination)).textSelection(.enabled).accessibilityIdentifier("cloneDestination")
             if model.repository != nil { Button(L("複製したリポジトリをホームで開く"), action: navigation.home) }
             Button("Clone", action: model.runAction).buttonStyle(.borderedProminent).accessibilityIdentifier("cloneExecute").disabled(model.cloneSource.isEmpty || model.cloneDestination.isEmpty || model.busy)
+            if let progress = model.transferProgress { GitTransferProgressView(progress: progress, busy: model.busy) }
         }
     }
     private var branchForm: some View {

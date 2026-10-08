@@ -48,6 +48,10 @@ struct CommitDetailsView: View {
                 Spacer()
                 if copyFailed { Text(L("コピーできませんでした。再度お試しください。")).font(.caption).foregroundStyle(.orange) }
                 else if copiedField != nil { Text(L("コピーしました")).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("commitCopyResult") }
+                Button(L("コミット ID をコピー")) { copyValue(commit.id, field: "id") }
+                    .accessibilityIdentifier("copyCommit:id")
+                Button(L("メッセージをコピー")) { copyValue(commit.message, field: "message") }
+                    .accessibilityIdentifier("copyCommit:message")
                 Button { copyValue(commit.detailsText, field: "all") } label: {
                     Label(L("全体をコピー"), systemImage: "doc.on.doc")
                 }.accessibilityIdentifier("copyCommit:all")
@@ -56,7 +60,7 @@ struct CommitDetailsView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(commit.detailFields) { field in
                         HStack(alignment: .top, spacing: 12) {
-                            Text(field.title).foregroundStyle(.secondary).frame(width: 140, alignment: .leading)
+                            Text(field.title).foregroundStyle(.secondary).frame(width: 160, alignment: .leading)
                             Text(field.value).font(field.monospaced ? .system(.body, design: .monospaced) : .body)
                                 .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -67,7 +71,7 @@ struct CommitDetailsView: View {
                             }.buttonStyle(.borderless)
                                 .help(L("\(field.title)をコピー"))
                                 .accessibilityLabel(L("\(field.title)をコピー"))
-                                .accessibilityIdentifier("copyCommit:" + field.id)
+                                .accessibilityIdentifier("copyCommitField:" + field.id)
                         }
                     }
                 }.padding(.trailing, 6).frame(maxWidth: .infinity, alignment: .leading)

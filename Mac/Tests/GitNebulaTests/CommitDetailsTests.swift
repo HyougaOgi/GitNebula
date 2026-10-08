@@ -75,7 +75,7 @@ import AppKit
         XCTAssertEqual(record.author, "作者 テスト"); XCTAssertEqual(record.email, "author@example.invalid")
         XCTAssertEqual(record.date, "2020-03-04T05:06:07+09:00")
         XCTAssertEqual(record.committer, "Committer Tester"); XCTAssertEqual(record.committerEmail, "committer@example.invalid")
-        XCTAssertTrue(record.commitDate.contains("T")); XCTAssertEqual(record.commitDate.count, 25)
+        XCTAssertNotNil(ISO8601DateFormatter().date(from: record.commitDate), "Both UTC Z and numeric time-zone offsets are valid complete timestamps")
         XCTAssertNotEqual(record.commitDate, record.date)
         XCTAssertEqual(record.id.count, 40); XCTAssertTrue(object.hasPrefix("tree " + record.tree + "\n"))
         XCTAssertTrue(record.parents.isEmpty)
@@ -134,7 +134,7 @@ import AppKit
         let window = window(host); defer { window.close() }
         try await wait { self.value(host, "commitField:id") == first.id }
         for field in first.detailFields {
-            let button = try XCTUnwrap(element(host, "copyCommit:" + field.id))
+            let button = try XCTUnwrap(element(host, "copyCommitField:" + field.id))
             XCTAssertTrue(press(button))
             try await wait { pasteboard.string(forType: .string) == field.value }
         }

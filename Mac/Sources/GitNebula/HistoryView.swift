@@ -48,7 +48,7 @@ struct HistoryBrowserView: View {
                         }.width(min: 250, ideal: 460)
                         TableColumn(L("作成者"), value: \.author).width(min: 100, ideal: 145, max: 210)
                         TableColumn(L("日時"), value: \.displayDate).width(145)
-                        TableColumn("ID") { Text($0.shortID).font(.system(.caption, design: .monospaced)) }.width(80)
+                        TableColumn("ID") { Text($0.id).font(.system(.caption, design: .monospaced)).textSelection(.enabled) }.width(min: 300, ideal: 340, max: 520)
                     }.accessibilityIdentifier("commitTable")
                     .overlay {
                         if loading && commits.isEmpty { ProgressView(L("履歴を読み込み中…")) }
@@ -96,9 +96,9 @@ struct CommitInspector: View {
             HStack {
                 if commit.parents.count > 1 {
                     Picker(L("比較する親"), selection: Binding(get: { base ?? "" }, set: { parent = $0 })) {
-                        ForEach(Array(commit.parents.enumerated()), id: \.element) { index, hash in Text(L("親 \(index + 1) · \(hash.prefix(8))")).tag(hash) }
+                        ForEach(Array(commit.parents.enumerated()), id: \.element) { index, hash in Text(L("親 \(index + 1) · \(hash)")).tag(hash) }
                     }.frame(maxWidth: 330)
-                } else { Text(base.map { L("親コミット \($0.prefix(8))  →  \(commit.shortID)") } ?? L("最初のコミット · 作成前と比較")).font(.caption).foregroundStyle(.secondary) }
+                } else { Text(base.map { L("親コミット \($0)  →  \(commit.id)") } ?? L("最初のコミット · 作成前と比較")).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
                 Spacer()
                 if !commit.decorations.isEmpty { Label(commit.decorations, systemImage: "tag").font(.caption).foregroundStyle(.cyan).lineLimit(1) }
             }.padding(.horizontal, 10)

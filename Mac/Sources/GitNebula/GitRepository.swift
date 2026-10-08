@@ -107,7 +107,7 @@ struct GitRepository: Sendable {
         if root.hasSuffix("\n") { root.removeLast() }
         return GitRepository(path: root)
     }
-    static func clone(_ source: String, _ destination: String) throws -> GitRepository {
+    static func clone(_ source: String, _ destination: String, progress: (@Sendable (GitTransferProgress) -> Void)? = nil) throws -> GitRepository {
         let target = URL(fileURLWithPath: NSString(string: destination).expandingTildeInPath)
         let runner = GitRepository(path: target.deletingLastPathComponent().path)
         guard !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !destination.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw runner.failure(L("取得元と作成先フォルダを指定してください。")) }
@@ -117,7 +117,8 @@ struct GitRepository: Sendable {
                 throw runner.failure(L("作成先 \(target.path) は既に使われています。別の保存先を指定してください。"))
             }
         }
-        _ = try runner.run(["clone", "--", source, target.path])
+        _ = try GitProcess.runWithOutput(in: runner.path, arguments: ["clone", "--progress", "--", source, target.path], progress: progress)
+        progress?(.checking)
         return try open(target.path)
     }
     func graph() throws -> String {
