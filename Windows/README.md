@@ -6,22 +6,22 @@ Native WPF application. The installer prepares .NET SDK as needed. Git is found 
 
 Gitを用意して、`GitNebula` フォルダがまだない作業ディレクトリで実行してください。
 
-Windows 10/11（x64／ARM64）。PowerShellで実行してください。.NET SDKは必要な場合だけ自動でインストールします。
+Windows 10/11（x64／ARM64）。**コマンドプロンプト（cmd.exe）**で実行してください。.NET SDKは必要な場合だけ自動でインストールします。
 
-```powershell
+```bat
 git clone https://github.com/HyougaOgi/GitNebula.git
 cd GitNebula
-.\Windows\install.cmd
+cmd /c Windows\install.cmd
 ```
 
 アプリ配置・スタートメニュー・右クリックメニューの登録まで行い、トレイで起動します。
 
-Gitがない場合は `winget install --id Git.Git --exact --source winget` を実行し、PowerShellを開き直してください。`winget` がない場合はMicrosoft Storeの **アプリ インストーラー** を更新してください。依存ソフトのインストール時にWindowsの確認画面が出たら許可してください。Windows 11ではメニューが **その他のオプションを確認** に表示される場合があります。
+Gitがない場合は `winget install --id Git.Git --exact --source winget` を実行し、コマンドプロンプトを開き直してください。`winget` がない場合はMicrosoft Storeの **アプリ インストーラー** を更新してください。依存ソフトのインストール時にWindowsの確認画面が出たら許可してください。Windows 11ではメニューが **その他のオプションを確認** に表示される場合があります。
 
 更新時はトレイメニューからGitNebulaを終了し、既存のチェックアウトで以下を実行してください。設定と保存した認証情報は維持し、以前のアプリは `%LOCALAPPDATA%\Programs\.gitnebula-backups` に保管します。ビルドに失敗した場合はインストール済みアプリを変更しません。
 
-```powershell
-.\Windows\install.cmd
+```bat
+cmd /c Windows\install.cmd
 ```
 
 `-NoOpen` でインストール後の起動を省略できます。`-Destination` で配置先、`-Runtime win-x64`／`-Runtime win-arm64` でCPUを明示できます。通常は指定不要です。実行ポリシーの指定はこのプロセスだけに適用し、ユーザー設定は変更しません。
@@ -70,11 +70,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Windows\Package.ps1 -R
 # Or -Runtime win-arm64 for a matching Windows machine.
 ```
 
-For a manually installed ZIP, extract it into `%LOCALAPPDATA%\Programs\GitNebula` before registering the menus below (no SDK is needed to run a self-contained ZIP). The source installer already registers the current user's Explorer file, folder and folder-background menus automatically:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Windows\Install-ContextMenu.ps1 -Executable "$env:LOCALAPPDATA\Programs\GitNebula\GitNebula.exe"
-```
+ZIPからのインストールは、ZIPをフォルダへ展開して、その中の **install.cmd** を実行してください。.NET SDKやソースコードは不要です。アプリを `%LOCALAPPDATA%\Programs\GitNebula` に配置し、スタートメニューと右クリックメニューを登録します。ZIPには `install.cmd`、`Install.ps1`、`Install-ContextMenu.ps1` を同梱します。
 
 Right-click **GitNebula** to open the repository operation chooser, or choose an operation under **GitNebula の機能**. The requested operation opens directly; Commit preselects the changes in the clicked file or folder. Explorer supports a single selected file/folder per dialog; use a folder to include all descendants. Each invocation is forwarded to the running app. Each repository retains separate work, History and Graph windows; matching requests reuse their window. Resizing History preserves the Graph size and camera, and different repositories preserve work and drafts. Requests wait for a running Git operation to finish in their target window. On Windows 11 this entry may appear under **Show more options**. Administrator privileges are not required. Re-run the installer after upgrading to replace the previous single-command entry.
 

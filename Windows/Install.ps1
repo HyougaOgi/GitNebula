@@ -56,7 +56,7 @@ function Install-GitNebulaDependency([string]$Package) {
     Update-GitNebulaPath
 }
 
-function Initialize-GitNebulaDependencies {
+function Initialize-GitNebulaGit {
     Update-GitNebulaPath
     $git = Find-GitNebulaTool 'git.exe' -Optional
     if (-not $git) {
@@ -65,6 +65,10 @@ function Initialize-GitNebulaDependencies {
     }
     & $git --version | Out-Host
     if ($LASTEXITCODE -ne 0) { throw 'Git for Windows could not be started.' }
+}
+
+function Initialize-GitNebulaDependencies {
+    Initialize-GitNebulaGit
     $dotnet = Find-GitNebulaTool 'dotnet.exe' -Optional
     $sdks = @()
     if ($dotnet) {
@@ -87,6 +91,49 @@ function Publish-GitNebulaApplication([string]$Runtime, [string]$Stage) {
     $dotnet = Initialize-GitNebulaDependencies
     & $dotnet publish (Join-Path $PSScriptRoot 'GitNebula.csproj') -c Release -r $Runtime --self-contained true -o $Stage
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed (exit $LASTEXITCODE). The installed application was not changed." }
+}
+
+function Get-GitNebulaSourceDirectory { return $PSScriptRoot }
+
+function Write-GitNebulaInstallManifest([string]$Directory) {
+    $names = @((Get-ChildItem -LiteralPath $Directory -Force).Name | Where-Object { $_ -ne 'GitNebula-install-files.json' })
+    $names += 'GitNebula-install-files.json'
+    @{ files = $names } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Directory 'GitNebula-install-files.json') -Encoding UTF8
+}
+
+function Add-GitNebulaInstallationFiles([string]$Stage) {
+    foreach ($name in @('install.cmd', 'Install.ps1', 'Install-ContextMenu.ps1', 'README.md')) {
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $Stage
+    }
+    Copy-Item -LiteralPath (Join-Path (Split-Path $PSScriptRoot -Parent) 'LICENSE') -Destination $Stage
+    Write-GitNebulaInstallManifest -Directory $Stage
+}
+
+function Initialize-GitNebulaPayload([string]$Runtime, [string]$Stage) {
+    $source = Get-GitNebulaSourceDirectory
+    if (Test-Path -LiteralPath (Join-Path $source 'GitNebula.csproj')) {
+        Write-Host "Building GitNebula ($Runtime)..."
+        Publish-GitNebulaApplication -Runtime $Runtime -Stage $Stage
+        Add-GitNebulaInstallationFiles -Stage $Stage
+        return
+    }
+    $manifestPath = Join-Path $source 'GitNebula-install-files.json'
+    if (-not (Test-Path -LiteralPath $manifestPath)) { throw 'This download is incomplete. Extract the complete GitNebula ZIP and run install.cmd from that folder.' }
+    $files = @((Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json).files)
+    foreach ($required in @('GitNebula.exe', 'GitNebula.dll', 'hostfxr.dll', 'coreclr.dll', 'install.cmd', 'Install.ps1', 'Install-ContextMenu.ps1')) {
+        if ($files -notcontains $required) { throw "The application package is missing $required." }
+    }
+    foreach ($name in $files) {
+        if ([string]::IsNullOrWhiteSpace($name) -or $name -in @('.', '..') -or
+            $name.IndexOfAny([char[]]'\/') -ge 0 -or [IO.Path]::GetFileName($name) -ne $name) {
+            throw 'Invalid application package file list.'
+        }
+        $file = Join-Path $source $name
+        if (-not (Test-Path -LiteralPath $file)) { throw "The application package is missing $name." }
+    }
+    Initialize-GitNebulaGit
+    Write-Host 'Installing the packaged application...'
+    foreach ($name in $files) { Copy-Item -LiteralPath (Join-Path $source $name) -Destination $Stage -Recurse -Force }
 }
 
 function Test-GitNebulaRunning([string]$Executable) {
@@ -146,12 +193,10 @@ function Install-GitNebula {
     $integrationStarted = $false
     try {
         New-Item -ItemType Directory -Path $stage | Out-Null
-        Write-Host "Building GitNebula ($Runtime)..."
-        Publish-GitNebulaApplication -Runtime $Runtime -Stage $stage
+        Initialize-GitNebulaPayload -Runtime $Runtime -Stage $stage
         foreach ($file in @('GitNebula.exe', 'GitNebula.dll')) {
             if (-not (Test-Path -LiteralPath (Join-Path $stage $file) -PathType Leaf)) { throw "The build did not produce $file. The installed application was not changed." }
         }
-        Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Install-ContextMenu.ps1'), (Join-Path (Split-Path $PSScriptRoot -Parent) 'LICENSE') -Destination $stage
         if (Test-Path -LiteralPath $shortcutPath) { Copy-Item -LiteralPath $shortcutPath -Destination (Join-Path $stage 'previous-shortcut.lnk') }
         # Place the new app on the destination drive before replacing the old one.
         New-Item -ItemType Directory -Path $parent -Force | Out-Null

@@ -8,13 +8,14 @@ $ErrorActionPreference = 'Stop'
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) { throw 'Build on Windows with Windows PowerShell 5.1 or PowerShell 7.' }
 if ($Signed -and [string]::IsNullOrWhiteSpace($CertificateThumbprint)) { throw 'Provide a code-signing certificate thumbprint from the Windows certificate store.' }
 $root = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot 'Install.ps1') -Runtime $Runtime
 $stage = Join-Path ([System.IO.Path]::GetTempPath()) ('GitNebula-' + [guid]::NewGuid())
 $output = Join-Path $root "dist\windows\$Runtime"
 try {
     New-Item $stage -ItemType Directory | Out-Null
     dotnet publish "$PSScriptRoot\GitNebula.csproj" -c Release -r $Runtime --self-contained true -o $stage
     if ($LASTEXITCODE -ne 0) { throw 'dotnet publish failed' }
-    Copy-Item "$PSScriptRoot\Install-ContextMenu.ps1", "$PSScriptRoot\README.md", "$root\LICENSE" $stage
+    Add-GitNebulaInstallationFiles -Stage $stage
     if ($Signed) {
         $signtool = (Get-Command signtool.exe -ErrorAction Stop).Source
         & $signtool sign /sha1 $CertificateThumbprint /fd SHA256 /tr $TimestampUrl /td SHA256 "$stage\GitNebula.exe" "$stage\GitNebula.dll"
