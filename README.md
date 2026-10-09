@@ -50,10 +50,8 @@ Windows 10/11（x64／ARM64）。PowerShellで実行してください。.NET SD
 
 ```powershell
 git clone https://github.com/HyougaOgi/GitNebula.git
-if ($LASTEXITCODE -eq 0) {
-    cd GitNebula
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Windows\Install.ps1
-}
+cd GitNebula
+.\Windows\install.cmd
 ```
 
 アプリ配置・スタートメニュー・右クリックメニューの登録まで行い、トレイで起動します。

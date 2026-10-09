@@ -10,10 +10,8 @@ Windows 10/11（x64／ARM64）。PowerShellで実行してください。.NET SD
 
 ```powershell
 git clone https://github.com/HyougaOgi/GitNebula.git
-if ($LASTEXITCODE -eq 0) {
-    cd GitNebula
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Windows\Install.ps1
-}
+cd GitNebula
+.\Windows\install.cmd
 ```
 
 アプリ配置・スタートメニュー・右クリックメニューの登録まで行い、トレイで起動します。
@@ -23,7 +21,7 @@ Gitがない場合は `winget install --id Git.Git --exact --source winget` を�
 更新時はトレイメニューからGitNebulaを終了し、既存のチェックアウトで以下を実行してください。設定と保存した認証情報は維持し、以前のアプリは `%LOCALAPPDATA%\Programs\.gitnebula-backups` に保管します。ビルドに失敗した場合はインストール済みアプリを変更しません。
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Windows\Install.ps1
+.\Windows\install.cmd
 ```
 
 `-NoOpen` でインストール後の起動を省略できます。`-Destination` で配置先、`-Runtime win-x64`／`-Runtime win-arm64` でCPUを明示できます。通常は指定不要です。実行ポリシーの指定はこのプロセスだけに適用し、ユーザー設定は変更しません。
@@ -65,7 +63,7 @@ Windows CI is temporarily disabled in the retained `windows` job; set its `if` c
 
 ## Package and Explorer integration
 
-Run packaging in Windows PowerShell 5.1 or PowerShell 7 on Windows. Installing the app uses `Install.ps1` above; packaging only creates an archive:
+Run packaging in Windows PowerShell 5.1 or PowerShell 7 on Windows. Installing the app uses `install.cmd` above; packaging only creates an archive:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Windows\Package.ps1 -Runtime win-x64
