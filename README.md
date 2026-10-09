@@ -30,88 +30,45 @@ All three platforms include full commit information with field/message/all copy,
 
 ## Getting started
 
-OSごとのコマンドを、`GitNebula` フォルダがまだない作業ディレクトリでまとめて貼り付けてください。HTTPSでソースを取得するため、clone時のSSH鍵設定は不要です。インストール後はアプリメニュー／スタートメニューから起動できます。
+事前にGitを用意してください。`GitNebula` フォルダがまだない作業ディレクトリで、使用するOSのコマンドをまとめて貼り付けます。
 
 ### macOS
 
-macOS 13以降、Swift 5.9以降が必要です。**ターミナル**に以下を貼り付けてください。Command Line ToolsがなければAppleのインストール画面が開くので、インストールを完了してください。その後、自動でcloneとアプリのインストールへ進みます。
+macOS 13以降。ターミナルで実行してください。
 
 ```sh
-(
-  set -eu
-  if ! xcode-select -p >/dev/null 2>&1; then
-    xcode-select --install
-    echo 'Command Line Toolsのインストール画面でインストールを完了してください。完了後、自動で続行します。'
-    until xcode-select -p >/dev/null 2>&1 && xcrun --find swift >/dev/null 2>&1 && xcrun --find git >/dev/null 2>&1; do sleep 5; done
-  fi
-  git clone https://github.com/HyougaOgi/GitNebula.git
-  cd GitNebula
-  bash Mac/install.sh
-)
+git clone https://github.com/HyougaOgi/GitNebula.git &&
+cd GitNebula &&
+bash Mac/install.sh
 ```
 
-`~/Applications/GitNebula.app` にアプリとFinder拡張をインストールし、メニューバーで起動します。右クリックメニューが出ない場合は、アプリの **Finder 拡張の設定を開く** から **GitNebula Finder** を有効にしてください。Swiftが古い場合は、[Command Line Tools](https://developer.apple.com/documentation/xcode/installing-the-command-line-tools)またはXcodeを更新してください。
+`~/Applications/GitNebula.app` にインストールし、メニューバーで起動します。ビルド用のCommand Line Toolsがなければ、インストーラーが準備を案内します。
 
 ### Windows
 
-Windows 10/11のx64またはARM64版で、**PowerShell**に以下を貼り付けてください。標準のWindows PowerShell 5.1とPowerShell 7の両方に対応しています。Gitと.NET 8 SDKがなければ[WinGet](https://learn.microsoft.com/en-us/windows/package-manager/winget/)でインストールします。`winget` がない場合は、Microsoft Storeの **アプリ インストーラー** をインストール／更新してからPowerShellを開き直してください。依存ソフトのインストール中にWindowsの確認画面が出たら許可してください。
+Windows 10/11（x64／ARM64）。PowerShellで実行してください。.NET SDKは必要な場合だけ自動でインストールします。
 
 ```powershell
-& {
-    $ErrorActionPreference = 'Stop'
-    function Update-GitNebulaPath {
-        $gitNebulaToolDirectories = @(
-            "$env:ProgramW6432\Git\cmd", "$env:ProgramW6432\dotnet",
-            "$env:ProgramFiles\Git\cmd", "$env:ProgramFiles\dotnet",
-            "$env:LOCALAPPDATA\Programs\Git\cmd"
-        ) | Where-Object { Test-Path -LiteralPath $_ -PathType Container }
-        $env:Path = @([Environment]::GetEnvironmentVariable('Path', 'Machine'),
-            [Environment]::GetEnvironmentVariable('Path', 'User'),
-            ($gitNebulaToolDirectories -join ';'), $env:Path) -join ';'
-    }
-    Update-GitNebulaPath
-    if (-not (Get-Command git.exe -CommandType Application -ErrorAction SilentlyContinue)) {
-        winget install --id Git.Git --exact --source winget --accept-package-agreements --accept-source-agreements
-        if ($LASTEXITCODE -ne 0) { throw 'Git for Windows installation failed.' }
-        Update-GitNebulaPath
-    }
-    $sdks = @()
-    if (Get-Command dotnet.exe -CommandType Application -ErrorAction SilentlyContinue) {
-        $sdks = @(dotnet --list-sdks)
-        if ($LASTEXITCODE -ne 0) { $sdks = @() }
-    }
-    if (-not ($sdks -match '^8\.')) {
-        winget install --id Microsoft.DotNet.SDK.8 --exact --source winget --accept-package-agreements --accept-source-agreements
-        if ($LASTEXITCODE -ne 0) { throw '.NET 8 SDK installation failed.' }
-        Update-GitNebulaPath
-    }
-    git clone https://github.com/HyougaOgi/GitNebula.git
-    if ($LASTEXITCODE -ne 0) { throw 'git clone failed.' }
-    Set-Location GitNebula
-    & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File .\Windows\Install.ps1
-    if ($LASTEXITCODE -ne 0) { throw 'GitNebula installation failed. See the error above.' }
+git clone https://github.com/HyougaOgi/GitNebula.git
+if ($LASTEXITCODE -eq 0) {
+    cd GitNebula
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Windows\Install.ps1
 }
 ```
 
-`%LOCALAPPDATA%\Programs\GitNebula` にアプリを配置し、スタートメニューとExplorerの右クリックメニューを登録して、トレイで起動します。x64／ARM64は自動判定し、.NETランタイムもアプリに同梱します。GitNebula本体のインストールに管理者権限は不要です。Windows 11では右クリックの **その他のオプションを確認** にメニューが表示される場合があります。
+アプリ配置・スタートメニュー・右クリックメニューの登録まで行い、トレイで起動します。
 
 ### Linux（Ubuntu / Debian）
 
-Ubuntu 22.04以降／Debian 12以降のデスクトップ環境で、**ターミナル**に以下を貼り付けてください。依存パッケージのインストール時に `sudo` のパスワードを入力します。
+Ubuntu 22.04以降／Debian 12以降。ターミナルで実行してください。GTKなどの必要パッケージはインストーラーが準備します。
 
 ```sh
-(
-  set -eu
-  sudo apt-get update
-  sudo apt-get install -y git python3 python3-gi python3-cairo python3-gi-cairo gir1.2-gtk-4.0 libsecret-tools python3-nautilus
-  git clone https://github.com/HyougaOgi/GitNebula.git
-  cd GitNebula
-  /usr/bin/python3 Linux/install.py
-  "$HOME/.local/bin/gitnebula" &
-)
+git clone https://github.com/HyougaOgi/GitNebula.git &&
+cd GitNebula &&
+bash Linux/install.sh
 ```
 
-`~/.local/share/gitnebula` にアプリ、`~/.local/bin/gitnebula` に起動コマンドを配置し、アプリメニューとNautilus／Dolphinの右クリックメニューを登録します。Nautilusのメニューが出ない場合は `nautilus -q` を実行して開き直してください。GNOMEでトレイに常駐させるにはAppIndicator／StatusNotifier対応の拡張が必要です。トレイが利用できない場合はアプリ画面が開きます。他のディストリビューションでは[Linuxガイド](Linux/README.md)の必要パッケージを用意してください。
+アプリメニューとNautilus／Dolphinの右クリックメニューを登録して起動します。パッケージのインストール時に `sudo` のパスワードを入力します。
 
 Configure your Git name and email before committing. Network operations use your existing Git credential helper or SSH agent. Configure SSH keys and passphrases in Settings, or use the existing SSH agent/configuration. Passphrases are held in macOS Keychain, Windows Credential Manager or Linux Secret Service; HTTPS uses Git's credential helper. GitNebula does not change global Git configuration.
 

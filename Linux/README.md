@@ -4,23 +4,19 @@ Native GTK 4 application using the distribution's Python and PyGObject bindings.
 
 ## インストール
 
-`GitNebula` フォルダがまだない作業ディレクトリで、以下をまとめて貼り付けてください。
+Gitを用意して、`GitNebula` フォルダがまだない作業ディレクトリで実行してください。
 
-Ubuntu 22.04以降／Debian 12以降のデスクトップ環境で、**ターミナル**に以下を貼り付けてください。依存パッケージのインストール時に `sudo` のパスワードを入力します。
+Ubuntu 22.04以降／Debian 12以降。ターミナルで実行してください。GTKなどの必要パッケージはインストーラーが準備します。
 
 ```sh
-(
-  set -eu
-  sudo apt-get update
-  sudo apt-get install -y git python3 python3-gi python3-cairo python3-gi-cairo gir1.2-gtk-4.0 libsecret-tools python3-nautilus
-  git clone https://github.com/HyougaOgi/GitNebula.git
-  cd GitNebula
-  /usr/bin/python3 Linux/install.py
-  "$HOME/.local/bin/gitnebula" &
-)
+git clone https://github.com/HyougaOgi/GitNebula.git &&
+cd GitNebula &&
+bash Linux/install.sh
 ```
 
-`~/.local/share/gitnebula` にアプリ、`~/.local/bin/gitnebula` に起動コマンドを配置し、アプリメニューとNautilus／Dolphinの右クリックメニューを登録します。Nautilusのメニューが出ない場合は `nautilus -q` を実行して開き直してください。GNOMEでトレイに常駐させるにはAppIndicator／StatusNotifier対応の拡張が必要です。トレイが利用できない場合はアプリ画面が開きます。他のディストリビューションではPython 3.10以降、Git 2.29以降、GTK 4、PyGObject、Python Cairo、Secret Serviceを用意してください。
+アプリメニューとNautilus／Dolphinの右クリックメニューを登録して起動します。パッケージのインストール時に `sudo` のパスワードを入力します。
+
+Gitがない場合は `sudo apt-get install -y git` で準備してください。Nautilusのメニューが出なければ `nautilus -q` で開き直してください。GNOMEのトレイ常駐にはAppIndicator対応の拡張が必要です。
 
 Requires Python 3.10+, Git 2.29+, and an X11 or Wayland desktop.
 

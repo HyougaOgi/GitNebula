@@ -52,6 +52,14 @@ Windows CI はジョブを残して `if: ${{ false }}` で停止している。�
 
 ## この作業での検証結果
 
+### 2026-10-09 / インストール手順の簡略化
+
+貼り付ける手順をclone・移動・インストールの3コマンドに縮めた。macOS/Linuxは3行、Windowsはclone失敗時に続行しないための条件を含めて5行。cloneに必要なGitだけを事前準備として案内し、Command Line Toolsの確認、WindowsのGit/.NET SDKの準備、Ubuntu/DebianのGTKなどのパッケージ準備は各インストーラーへ移した。
+
+- Windowsの隔離テスト成功。既存のインストール・復元テストに加え、Git/SDK不足時のWinGet呼び出し、準備済みの場合の省略、WinGetの失敗・未導入、SDKが利用できないままのときの中断を確認。
+- Linuxのシェル経由で依存済み・GTK不足・Nautilus拡張不足・apt失敗・アンインストールを隔離検証。実際のユーザー用ファイル配置と削除は一時prefixで行い、aptなどのシステム変更をするコマンドは差し替えた。
+- macOSのCommand Line Tools不足時の案内と準備済みの省略を差し替えコマンドで確認。ビルド段階で停止し、実インストールやFinder登録は行っていない。全コード欄の構文とOS別READMEとの一致を確認。
+
 ### 2026-10-09 / OS別のインストール
 
 READMEの初期手順はmacOSとLinuxが同じコード欄に入り、LinuxとWindowsは開発用の起動コマンドだけだった。OSごとに依存ソフトの準備、HTTPSの `git clone`、実際のインストール、起動までを一括で貼り付けられるように変更し、各OSのREADMEにも同じ手順を記載した。Windowsに `Install.ps1` を追加し、ユーザー用アプリ配置・CPU判定・スタートメニュー・Explorerメニュー・起動をまとめた。`Package.ps1` のOS判定はWindows PowerShell 5.1に存在しない `$IsWindows` から共通APIへ変更した。

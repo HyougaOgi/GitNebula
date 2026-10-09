@@ -2,6 +2,7 @@
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../../Windows/Install.ps1')
 $publish = ${function:Publish-GitNebulaApplication}
+$dependencyInstaller = ${function:Install-GitNebulaDependency}
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('GitNebula install [test] ' + [guid]::NewGuid())
 $originalPath = $env:Path
 $originalArchitecture = $env:PROCESSOR_ARCHITECTURE
@@ -39,9 +40,29 @@ function Publish-GitNebulaApplication([string]$Runtime, [string]$Stage) {
     Set-Content -LiteralPath (Join-Path $Stage 'resources/data.txt') -Value 'resource'
     if ($script:runDuringBuild) { $script:running = $true }
 }
-function Find-GitNebulaTool([string]$Name) {
-    if ($Name -eq 'git.exe') { return 'Invoke-TestGit' }
+function Find-GitNebulaTool([string]$Name, [switch]$Optional) {
+    if ($Name -eq 'winget.exe') {
+        if ($script:wingetMissing) { return $null }
+        return 'Invoke-TestWinget'
+    }
+    if ($Name -eq 'git.exe') {
+        if ($script:gitMissing -and $Optional) { return $null }
+        return 'Invoke-TestGit'
+    }
+    if ($script:dotnetMissing -and $Optional) { return $null }
     return 'Invoke-TestDotnet'
+}
+function Invoke-TestWinget {
+    $script:dependencyCount++
+    $script:lastPackage = $args[2]
+    $global:LASTEXITCODE = $script:wingetExit
+    if ($script:wingetExit -eq 0 -and -not $script:dependencyNoEffect) {
+        if ($args[2] -eq 'Git.Git') { $script:gitMissing = $false }
+        else {
+            $script:dotnetMissing = $false
+            $script:sdk = '8.0.425 [C:\Program Files\dotnet\sdk]'
+        }
+    }
 }
 function Invoke-TestGit { $global:LASTEXITCODE = $script:gitExit }
 function Invoke-TestDotnet {
@@ -65,10 +86,31 @@ try {
     $env:PROCESSOR_ARCHITECTURE = 'AMD64'
 
     $script:gitExit = 0
+    $script:wingetExit = 0
     $script:sdk = '8.0.425 [C:\Program Files\dotnet\sdk]'
     Assert-InstallFailure { & $publish -Runtime win-x64 -Stage $testRoot } 'dotnet publish failed (exit 23)'
     $script:sdk = '6.0.428 [C:\Program Files\dotnet\sdk]'
-    Assert-InstallFailure { & $publish -Runtime win-x64 -Stage $testRoot } 'Install .NET SDK 8'
+    Assert-InstallFailure { & $publish -Runtime win-x64 -Stage $testRoot } 'dotnet publish failed (exit 23)'
+    Assert-Install ($script:lastPackage -eq 'Microsoft.DotNet.SDK.8') 'Missing SDK was not installed automatically'
+    $script:dotnetMissing = $true
+    Assert-InstallFailure { & $publish -Runtime win-x64 -Stage $testRoot } 'dotnet publish failed (exit 23)'
+    Assert-Install (-not $script:dotnetMissing) 'Missing dotnet was not installed automatically'
+    $script:gitMissing = $true
+    Assert-InstallFailure { & $publish -Runtime win-x64 -Stage $testRoot } 'dotnet publish failed (exit 23)'
+    Assert-Install ($script:lastPackage -eq 'Git.Git') 'Missing Git was not installed automatically'
+    $beforeDependencies = $script:dependencyCount
+    Assert-InstallFailure { & $publish -Runtime win-x64 -Stage $testRoot } 'dotnet publish failed (exit 23)'
+    Assert-Install ($script:dependencyCount -eq $beforeDependencies) 'Existing prerequisites were installed again'
+    $script:wingetExit = 42
+    Assert-InstallFailure { & $dependencyInstaller -Package Microsoft.DotNet.SDK.8 } 'installation failed (exit 42)'
+    $script:wingetExit = 0
+    $script:wingetMissing = $true
+    Assert-InstallFailure { & $dependencyInstaller -Package Microsoft.DotNet.SDK.8 } 'WinGet is unavailable'
+    $script:wingetMissing = $false
+    $script:dependencyNoEffect = $true
+    $script:sdk = '6.0.428 [C:\Program Files\dotnet\sdk]'
+    Assert-InstallFailure { & $publish -Runtime win-x64 -Stage $testRoot } 'still unavailable after installation'
+    $script:dependencyNoEffect = $false
     $script:gitExit = 1
     Assert-InstallFailure { & $publish -Runtime win-x64 -Stage $testRoot } 'Git for Windows could not be started'
     $env:Path = $originalPath

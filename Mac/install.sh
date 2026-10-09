@@ -14,7 +14,14 @@ while [ "$#" -gt 0 ]; do
   esac
   shift
 done
-if "$build"; then bash package.sh --unsigned; fi
+if "$build"; then
+  if ! xcode-select -p >/dev/null 2>&1; then
+    xcode-select --install
+    echo 'Complete the Command Line Tools installation dialog. Installation will then continue automatically.'
+    until xcode-select -p >/dev/null 2>&1 && xcrun --find swift >/dev/null 2>&1; do sleep 5; done
+  fi
+  bash package.sh --unsigned
+fi
 archive="$(pwd)/../dist/mac/GitNebula-unsigned.zip"
 test -f "$archive" || { echo 'Build the unsigned package first.' >&2; exit 1; }
 stage="$(mktemp -d)"

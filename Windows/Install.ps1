@@ -20,12 +20,15 @@ function Get-GitNebulaRuntime {
     }
 }
 
-function Find-GitNebulaTool([string]$Name) {
+function Find-GitNebulaTool([string]$Name, [switch]$Optional) {
     $command = Get-Command $Name -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($command) { return $command.Source }
-    $relative = if ($Name -eq 'git.exe') { 'Git\cmd\git.exe' } else { 'dotnet\dotnet.exe' }
+    $relative = switch ($Name) {
+        'git.exe' { 'Git\cmd\git.exe' }
+        'dotnet.exe' { 'dotnet\dotnet.exe' }
+    }
     foreach ($base in @($env:ProgramW6432, $env:ProgramFiles, ${env:ProgramFiles(x86)})) {
-        if ($base) {
+        if ($base -and $relative) {
             $candidate = Join-Path $base $relative
             if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
         }
@@ -34,21 +37,54 @@ function Find-GitNebulaTool([string]$Name) {
         $candidate = Join-Path $env:LOCALAPPDATA 'Programs\Git\cmd\git.exe'
         if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
     }
-    throw "Cannot find $Name. Install the prerequisites using the Windows commands in README.md."
+    if ($Optional) { return $null }
+    throw "Cannot find $Name. Install Git for Windows or .NET SDK 8 and run the installer again."
 }
 
-function Publish-GitNebulaApplication([string]$Runtime, [string]$Stage) {
+function Update-GitNebulaPath {
     # Dependency installers update the registry PATH, not this running shell.
     $env:Path = @([Environment]::GetEnvironmentVariable('Path', 'Machine'),
         [Environment]::GetEnvironmentVariable('Path', 'User'), $env:Path) -join ';'
-    $git = Find-GitNebulaTool 'git.exe'
-    & $git --version
-    if ($LASTEXITCODE -ne 0) { throw 'Git for Windows could not be started.' }
-    $dotnet = Find-GitNebulaTool 'dotnet.exe'
-    $sdks = & $dotnet --list-sdks
-    if ($LASTEXITCODE -ne 0 -or -not ($sdks -match '^(?:[89]|[1-9][0-9]+)\.[0-9]+\.[0-9]+ ')) {
-        throw 'Install .NET SDK 8 (a runtime alone cannot build GitNebula): winget install --id Microsoft.DotNet.SDK.8 --exact --source winget'
+}
+
+function Install-GitNebulaDependency([string]$Package) {
+    $winget = Find-GitNebulaTool 'winget.exe' -Optional
+    if (-not $winget) { throw 'WinGet is unavailable. Update Microsoft App Installer, or install Git for Windows and .NET SDK 8 manually.' }
+    Write-Host "Installing $Package..."
+    & $winget install --id $Package --exact --source winget --accept-package-agreements --accept-source-agreements | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw "$Package installation failed (exit $LASTEXITCODE)." }
+    Update-GitNebulaPath
+}
+
+function Initialize-GitNebulaDependencies {
+    Update-GitNebulaPath
+    $git = Find-GitNebulaTool 'git.exe' -Optional
+    if (-not $git) {
+        Install-GitNebulaDependency 'Git.Git'
+        $git = Find-GitNebulaTool 'git.exe'
     }
+    & $git --version | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw 'Git for Windows could not be started.' }
+    $dotnet = Find-GitNebulaTool 'dotnet.exe' -Optional
+    $sdks = @()
+    if ($dotnet) {
+        $sdks = @(& $dotnet --list-sdks)
+        if ($LASTEXITCODE -ne 0) { $sdks = @() }
+    }
+    $supportedSdk = '^(?:[89]|[1-9][0-9]+)\.[0-9]+\.[0-9]+ '
+    if (-not ($sdks -match $supportedSdk)) {
+        Install-GitNebulaDependency 'Microsoft.DotNet.SDK.8'
+        $dotnet = Find-GitNebulaTool 'dotnet.exe'
+        $sdks = @(& $dotnet --list-sdks)
+        if ($LASTEXITCODE -ne 0 -or -not ($sdks -match $supportedSdk)) {
+            throw '.NET SDK 8 is still unavailable after installation. Reopen PowerShell and try again.'
+        }
+    }
+    return $dotnet
+}
+
+function Publish-GitNebulaApplication([string]$Runtime, [string]$Stage) {
+    $dotnet = Initialize-GitNebulaDependencies
     & $dotnet publish (Join-Path $PSScriptRoot 'GitNebula.csproj') -c Release -r $Runtime --self-contained true -o $Stage
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed (exit $LASTEXITCODE). The installed application was not changed." }
 }

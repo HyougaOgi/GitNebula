@@ -1,51 +1,24 @@
 # GitNebula for Windows
 
-Native WPF application. Install .NET 8 SDK and Git for Windows, Git is found on PATH or in standard Git for Windows installation directories; its path can also be set in **アプリの設定**.
+Native WPF application. The installer prepares .NET SDK as needed. Git is found on PATH or in standard Git for Windows installation directories; its path can also be set in **アプリの設定**.
 
 ## インストール
 
-`GitNebula` フォルダがまだない作業ディレクトリで、以下をまとめて貼り付けてください。
+Gitを用意して、`GitNebula` フォルダがまだない作業ディレクトリで実行してください。
 
-Windows 10/11のx64またはARM64版で、**PowerShell**に以下を貼り付けてください。標準のWindows PowerShell 5.1とPowerShell 7の両方に対応しています。Gitと.NET 8 SDKがなければ[WinGet](https://learn.microsoft.com/en-us/windows/package-manager/winget/)でインストールします。`winget` がない場合は、Microsoft Storeの **アプリ インストーラー** をインストール／更新してからPowerShellを開き直してください。依存ソフトのインストール中にWindowsの確認画面が出たら許可してください。
+Windows 10/11（x64／ARM64）。PowerShellで実行してください。.NET SDKは必要な場合だけ自動でインストールします。
 
 ```powershell
-& {
-    $ErrorActionPreference = 'Stop'
-    function Update-GitNebulaPath {
-        $gitNebulaToolDirectories = @(
-            "$env:ProgramW6432\Git\cmd", "$env:ProgramW6432\dotnet",
-            "$env:ProgramFiles\Git\cmd", "$env:ProgramFiles\dotnet",
-            "$env:LOCALAPPDATA\Programs\Git\cmd"
-        ) | Where-Object { Test-Path -LiteralPath $_ -PathType Container }
-        $env:Path = @([Environment]::GetEnvironmentVariable('Path', 'Machine'),
-            [Environment]::GetEnvironmentVariable('Path', 'User'),
-            ($gitNebulaToolDirectories -join ';'), $env:Path) -join ';'
-    }
-    Update-GitNebulaPath
-    if (-not (Get-Command git.exe -CommandType Application -ErrorAction SilentlyContinue)) {
-        winget install --id Git.Git --exact --source winget --accept-package-agreements --accept-source-agreements
-        if ($LASTEXITCODE -ne 0) { throw 'Git for Windows installation failed.' }
-        Update-GitNebulaPath
-    }
-    $sdks = @()
-    if (Get-Command dotnet.exe -CommandType Application -ErrorAction SilentlyContinue) {
-        $sdks = @(dotnet --list-sdks)
-        if ($LASTEXITCODE -ne 0) { $sdks = @() }
-    }
-    if (-not ($sdks -match '^8\.')) {
-        winget install --id Microsoft.DotNet.SDK.8 --exact --source winget --accept-package-agreements --accept-source-agreements
-        if ($LASTEXITCODE -ne 0) { throw '.NET 8 SDK installation failed.' }
-        Update-GitNebulaPath
-    }
-    git clone https://github.com/HyougaOgi/GitNebula.git
-    if ($LASTEXITCODE -ne 0) { throw 'git clone failed.' }
-    Set-Location GitNebula
-    & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File .\Windows\Install.ps1
-    if ($LASTEXITCODE -ne 0) { throw 'GitNebula installation failed. See the error above.' }
+git clone https://github.com/HyougaOgi/GitNebula.git
+if ($LASTEXITCODE -eq 0) {
+    cd GitNebula
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Windows\Install.ps1
 }
 ```
 
-`%LOCALAPPDATA%\Programs\GitNebula` にアプリを配置し、スタートメニューとExplorerの右クリックメニューを登録して、トレイで起動します。x64／ARM64は自動判定し、.NETランタイムもアプリに同梱します。GitNebula本体のインストールに管理者権限は不要です。Windows 11では右クリックの **その他のオプションを確認** にメニューが表示される場合があります。
+アプリ配置・スタートメニュー・右クリックメニューの登録まで行い、トレイで起動します。
+
+Gitがない場合は `winget install --id Git.Git --exact --source winget` を実行し、PowerShellを開き直してください。`winget` がない場合はMicrosoft Storeの **アプリ インストーラー** を更新してください。依存ソフトのインストール時にWindowsの確認画面が出たら許可してください。Windows 11ではメニューが **その他のオプションを確認** に表示される場合があります。
 
 更新時はトレイメニューからGitNebulaを終了し、既存のチェックアウトで以下を実行してください。設定と保存した認証情報は維持し、以前のアプリは `%LOCALAPPDATA%\Programs\.gitnebula-backups` に保管します。ビルドに失敗した場合はインストール済みアプリを変更しません。
 

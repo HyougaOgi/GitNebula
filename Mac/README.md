@@ -6,25 +6,19 @@ Native SwiftUI application and Finder Sync extension. Requires macOS 13 or newer
 
 ## インストール
 
-`GitNebula` フォルダがまだない作業ディレクトリで、以下をまとめて貼り付けてください。
+Gitを用意して、`GitNebula` フォルダがまだない作業ディレクトリで実行してください。
 
-macOS 13以降、Swift 5.9以降が必要です。**ターミナル**に以下を貼り付けてください。Command Line ToolsがなければAppleのインストール画面が開くので、インストールを完了してください。その後、自動でcloneとアプリのインストールへ進みます。
+macOS 13以降。ターミナルで実行してください。
 
 ```sh
-(
-  set -eu
-  if ! xcode-select -p >/dev/null 2>&1; then
-    xcode-select --install
-    echo 'Command Line Toolsのインストール画面でインストールを完了してください。完了後、自動で続行します。'
-    until xcode-select -p >/dev/null 2>&1 && xcrun --find swift >/dev/null 2>&1 && xcrun --find git >/dev/null 2>&1; do sleep 5; done
-  fi
-  git clone https://github.com/HyougaOgi/GitNebula.git
-  cd GitNebula
-  bash Mac/install.sh
-)
+git clone https://github.com/HyougaOgi/GitNebula.git &&
+cd GitNebula &&
+bash Mac/install.sh
 ```
 
-`~/Applications/GitNebula.app` にアプリとFinder拡張をインストールし、メニューバーで起動します。右クリックメニューが出ない場合は、アプリの **Finder 拡張の設定を開く** から **GitNebula Finder** を有効にしてください。Swiftが古い場合は、[Command Line Tools](https://developer.apple.com/documentation/xcode/installing-the-command-line-tools)またはXcodeを更新してください。
+`~/Applications/GitNebula.app` にインストールし、メニューバーで起動します。ビルド用のCommand Line Toolsがなければ、インストーラーが準備を案内します。
+
+Gitがない場合は `xcode-select --install` でCommand Line Toolsをインストールしてから実行してください。Finderのメニューが出なければ、アプリの **Finder 拡張の設定を開く** から **GitNebula Finder** を有効にしてください。
 
 `install.sh` builds the app and Finder extension, installs `~/Applications/GitNebula.app`, registers it with LaunchServices and PlugInKit, requests that the extension be enabled, restarts the GitNebula extension, and opens the app. Existing versions are retained under `~/Applications/.gitnebula-backups/`. To reinstall an already built package, run `bash Mac/install.sh --no-build`; add `--no-open` to leave the app closed. An alternate installation directory can be passed with `--destination`.
 
