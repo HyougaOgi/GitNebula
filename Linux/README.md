@@ -2,16 +2,25 @@
 
 Native GTK 4 application using the distribution's Python and PyGObject bindings.
 
-```sh
-# Debian / Ubuntu
-sudo apt-get install python3-gi python3-cairo python3-gi-cairo gir1.2-gtk-4.0 libsecret-tools git
-/usr/bin/python3 Linux/main.py
+## インストール
 
-# Open the commit dialog directly
-/usr/bin/python3 Linux/main.py --action commit --path /path/to/repository
-# Review one file
-/usr/bin/python3 Linux/main.py --action diff --path "/path/to/repository/file.txt"
+`GitNebula` フォルダがまだない作業ディレクトリで、以下をまとめて貼り付けてください。
+
+Ubuntu 22.04以降／Debian 12以降のデスクトップ環境で、**ターミナル**に以下を貼り付けてください。依存パッケージのインストール時に `sudo` のパスワードを入力します。
+
+```sh
+(
+  set -eu
+  sudo apt-get update
+  sudo apt-get install -y git python3 python3-gi python3-cairo python3-gi-cairo gir1.2-gtk-4.0 libsecret-tools python3-nautilus
+  git clone https://github.com/HyougaOgi/GitNebula.git
+  cd GitNebula
+  /usr/bin/python3 Linux/install.py
+  "$HOME/.local/bin/gitnebula" &
+)
 ```
+
+`~/.local/share/gitnebula` にアプリ、`~/.local/bin/gitnebula` に起動コマンドを配置し、アプリメニューとNautilus／Dolphinの右クリックメニューを登録します。Nautilusのメニューが出ない場合は `nautilus -q` を実行して開き直してください。GNOMEでトレイに常駐させるにはAppIndicator／StatusNotifier対応の拡張が必要です。トレイが利用できない場合はアプリ画面が開きます。他のディストリビューションではPython 3.10以降、Git 2.29以降、GTK 4、PyGObject、Python Cairo、Secret Serviceを用意してください。
 
 Requires Python 3.10+, Git 2.29+, and an X11 or Wayland desktop.
 
@@ -20,7 +29,7 @@ History and both graph modes reserve space for commit information when the windo
 ## Install and file-manager menus
 
 ```sh
-python3 Linux/install.py
+/usr/bin/python3 Linux/install.py
 ```
 
 This copies the application into `~/.local/share/gitnebula`, creates `~/.local/bin/gitnebula`, registers a desktop launcher, and installs:
@@ -36,7 +45,7 @@ Dolphin provides explicit **この階層に Clone** and **選択フォルダ内�
 
 ```sh
 # Remove only GitNebula's installed files and menu entries
-python3 Linux/install.py --uninstall
+/usr/bin/python3 Linux/install.py --uninstall
 ```
 
 An alternate installation root is available through `--prefix`. Keep that prefix the same when uninstalling.
@@ -56,7 +65,15 @@ Commit has a multiline message editor, Ctrl+Enter and a Push button after succes
 
 Dedicated screens provide Stash save/preview/Apply/Pop/Drop; Cherry-pick, Revert and Rebase with conflict Continue/Abort; branch creation/rename/deletion; Stage/Unstage/Ignore/Discard; tags; remotes; identity; Init; commit comparison; file history; Blame; Reflog; Soft/Mixed/Hard Reset; binary patch export/check/application; Worktree creation/listing; and Submodule registration/update. Existing destination files and dirty worktrees are protected as appropriate. Back retains commit drafts and selection. See the [feature matrix](../shared/FEATURES.md) and [verified coverage](../shared/VALIDATION.md).
 
-## Tests
+## Development and tests
+
+The source application can be run directly from an existing checkout without installing launchers:
+
+```sh
+/usr/bin/python3 Linux/main.py
+/usr/bin/python3 Linux/main.py --action commit --path /path/to/repository
+/usr/bin/python3 Linux/main.py --action diff --path "/path/to/repository/file.txt"
+```
 
 ```sh
 python3 -m unittest discover -s tests -v

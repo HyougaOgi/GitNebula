@@ -4,13 +4,27 @@
 
 Native SwiftUI application and Finder Sync extension. Requires macOS 13 or newer and Xcode Command Line Tools (`xcode-select --install`). Git is discovered automatically (Homebrew or `/usr/bin/git`), or selected in **アプリの設定**.
 
-From the repository root:
+## インストール
+
+`GitNebula` フォルダがまだない作業ディレクトリで、以下をまとめて貼り付けてください。
+
+macOS 13以降、Swift 5.9以降が必要です。**ターミナル**に以下を貼り付けてください。Command Line ToolsがなければAppleのインストール画面が開くので、インストールを完了してください。その後、自動でcloneとアプリのインストールへ進みます。
 
 ```sh
-swift run --package-path Mac
-swift test --package-path Mac
-bash Mac/install.sh
+(
+  set -eu
+  if ! xcode-select -p >/dev/null 2>&1; then
+    xcode-select --install
+    echo 'Command Line Toolsのインストール画面でインストールを完了してください。完了後、自動で続行します。'
+    until xcode-select -p >/dev/null 2>&1 && xcrun --find swift >/dev/null 2>&1 && xcrun --find git >/dev/null 2>&1; do sleep 5; done
+  fi
+  git clone https://github.com/HyougaOgi/GitNebula.git
+  cd GitNebula
+  bash Mac/install.sh
+)
 ```
+
+`~/Applications/GitNebula.app` にアプリとFinder拡張をインストールし、メニューバーで起動します。右クリックメニューが出ない場合は、アプリの **Finder 拡張の設定を開く** から **GitNebula Finder** を有効にしてください。Swiftが古い場合は、[Command Line Tools](https://developer.apple.com/documentation/xcode/installing-the-command-line-tools)またはXcodeを更新してください。
 
 `install.sh` builds the app and Finder extension, installs `~/Applications/GitNebula.app`, registers it with LaunchServices and PlugInKit, requests that the extension be enabled, restarts the GitNebula extension, and opens the app. Existing versions are retained under `~/Applications/.gitnebula-backups/`. To reinstall an already built package, run `bash Mac/install.sh --no-build`; add `--no-open` to leave the app closed. An alternate installation directory can be passed with `--destination`.
 
@@ -24,6 +38,17 @@ xcrun swiftc -parse-as-library make-icon.swift Sources/GitNebula/NebulaRenderer.
 /tmp/gitnebula-make-icon /tmp/GitNebula.iconset --render
 cp /tmp/GitNebula.iconset/icon_512x512@2x.png Assets/GitNebula.png
 ```
+
+## Development and tests
+
+From an existing checkout, run:
+
+```sh
+swift run --package-path Mac
+swift test --package-path Mac
+```
+
+`swift run` starts the development executable. To update the installed app, quit GitNebula and run `bash Mac/install.sh` from the repository root.
 
 ## App screen and residence
 

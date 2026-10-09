@@ -29,5 +29,6 @@ jobs:
       - run: dotnet build Windows/GitNebula.csproj
       - run: dotnet run --project tests/windows/GitNebula.BackendTests.csproj
       - run: dotnet run --project tests/windows-ui/GitNebula.UiTests.csproj
+      - run: ./tests/windows/Test-Install.ps1
       - run: ./tests/windows/Test-ContextMenu.ps1
       - run: ./Windows/Package.ps1
